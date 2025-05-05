@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Extract Frames - Video Annotation Tool</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        h1 {
+            color: #2c3e50;
+            border-bottom: 2px solid #eee;
+            padding-bottom: 10px;
+        }
+        .method {
+            background-color: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 4px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        code, pre {
+            background-color: #f1f1f1;
+            padding: 2px 5px;
+            border-radius: 3px;
+            font-family: monospace;
+        }
+        pre {
+            padding: 15px;
+            overflow-x: auto;
+        }
+        .note {
+            background-color: #e2f2ff;
+            border-left: 4px solid #1e88e5;
+            padding: 10px 15px;
+            margin: 15px 0;
+        }
+        .btn {
+            display: inline-block;
+            background-color: #2c3e50;
+            color: white;
+            padding: 10px 15px;
+            text-decoration: none;
+            border-radius: 4px;
+            margin-top: 20px;
+        }
+        .btn:hover {
+            background-color: #1a252f;
+        }
+    </style>
+</head>
+<body>
+    <h1>Extract Frames from Video</h1>
+    
+    <p>Before using the Video Annotation Tool, you need to extract frames from your video. 
+       This page provides instructions on how to do that.</p>
+    
+    <div class="method">
+        <h2>Method 1: Using FFmpeg (Recommended)</h2>
+        <p>FFmpeg is a powerful command-line tool for video processing:</p>
+        
+        <ol>
+            <li>Make sure FFmpeg is installed on your system.
+                <ul>
+                    <li>On Linux: <code>sudo apt-get install ffmpeg</code></li>
+                    <li>On macOS with Homebrew: <code>brew install ffmpeg</code></li>
+                    <li>On Windows: Download from <a href="https://ffmpeg.org/download.html" target="_blank">ffmpeg.org</a></li>
+                </ul>
+            </li>
+            <li>Place your video file at <code>static/video.mp4</code></li>
+            <li>Open a terminal/command prompt and navigate to your project directory</li>
+            <li>Run the following command:</li>
+        </ol>
+        
+        <pre><code>mkdir -p static/frames
+ffmpeg -i static/video.mp4 -r 1 static/frames/frame_%04d.jpg</code></pre>
+        
+        <p>This command will extract 1 frame per second from your video.</p>
+        
+        <div class="note">
+            <p><strong>Adjusting frame extraction rate:</strong></p>
+            <ul>
+                <li>To extract 5 frames per second: <code>-r 5</code></li>
+                <li>To extract 1 frame every 2 seconds: <code>-r 0.5</code></li>
+                <li>To extract frames at the video's native frame rate: omit the <code>-r</code> parameter</li>
+            </ul>
+        </div>
+    </div>
+    
+    <div class="method">
+        <h2>Method 2: Using Python with OpenCV</h2>
+        <p>If you prefer a Python script, you can use OpenCV:</p>
+        
+        <ol>
+            <li>Install OpenCV: <code>pip install opencv-python</code></li>
+            <li>Create a Python script (e.g., <code>extract_frames.py</code>) with the following content:</li>
+        </ol>
+        
+        <pre><code>import os
+import cv2
+
+# Create output directory if it doesn't exist
+os.makedirs('static/frames', exist_ok=True)
+
+# Open the video
+vidcap = cv2.VideoCapture('static/video.mp4')
+fps = vidcap.get(cv2.CAP_PROP_FPS)
+print(f"Video FPS: {fps}")
+
+success = True
+frame_count = 0
+saved_count = 0
+
+# Extract frames (saving 1 frame per second)
+target_fps = 1  # Change this to extract more or fewer frames
+frame_interval = int(fps / target_fps)
+
+while success:
+    success, image = vidcap.read()
+    if not success:
+        break
+        
+    if frame_count % frame_interval == 0:
+        cv2.imwrite(f"static/frames/frame_{saved_count:04d}.jpg", image)
+        saved_count += 1
+        
+    frame_count += 1
+
+print(f"Extracted {saved_count} frames from {frame_count} total frames")</code></pre>
+        
+        <p>Run the script with: <code>python extract_frames.py</code></p>
+    </div>
+    
+    <div class="note">
+        <p><strong>Important:</strong> Make sure your video file is named <code>video.mp4</code> and placed in the <code>static/</code> directory. 
+           If your video has a different name or format, adjust the commands accordingly.</p>
+    </div>
+    
+    <a href="/" class="btn">Return to Annotation Tool</a>
+</body>
+</html> 

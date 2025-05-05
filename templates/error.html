@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Error - Video Annotation Tool</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .error-container {
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            border-radius: 4px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        h1 {
+            color: #721c24;
+        }
+        .action-section {
+            margin-top: 30px;
+            border-top: 1px solid #ddd;
+            padding-top: 20px;
+        }
+        code {
+            background-color: #f8f9fa;
+            padding: 2px 5px;
+            border-radius: 3px;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <h1>Error</h1>
+    
+    <div class="error-container">
+        <p><strong>{{ message }}</strong></p>
+    </div>
+    
+    <div class="action-section">
+        <h2>How to Extract Video Frames</h2>
+        <p>To use this tool, you need to extract frames from your video first. Here's how to do it:</p>
+        
+        <h3>Option 1: Using FFmpeg (Recommended)</h3>
+        <p>If you have FFmpeg installed:</p>
+        <ol>
+            <li>Place your video at <code>static/video.mp4</code></li>
+            <li>Run the following command in your terminal:</li>
+            <pre><code>mkdir -p static/frames
+ffmpeg -i static/video.mp4 -r 1 static/frames/frame_%04d.jpg</code></pre>
+            <li>This will extract 1 frame per second. If you want a different rate, change the <code>-r 1</code> parameter.</li>
+        </ol>
+        
+        <h3>Option 2: Use another extraction tool</h3>
+        <p>Extract frames from your video and place them in the <code>static/frames/</code> directory.</p>
+        
+        <p><a href="/">Refresh the page</a> after extracting frames.</p>
+    </div>
+</body>
+</html> 

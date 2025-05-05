@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Annotation Tool</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Video Annotation Tool</h1>
+            <div class="actions">
+                <button id="saveBtn">Save to CSV</button>
+                <label for="csvFileInput" class="button">Load CSV</label>
+                <input type="file" id="csvFileInput" accept=".csv" style="display: none;">
+                <a href="{{ url_for('download_csv') }}" id="downloadBtn" class="button" target="_blank">Download CSV</a>
+            </div>
+        </header>
+
+        <main>
+            <div class="video-container">
+                <video id="videoPlayer" controls data-fps="{{ fps }}">
+                    <source src="{{ url_for('static', filename=video_file) }}" type="video/mp4">
+                    Your browser does not support the video tag.
+                </video>
+                <div class="video-controls">
+                    <button id="setStartBtn">Set Start</button>
+                    <button id="setEndBtn">Set End</button>
+                </div>
+            </div>
+
+            <div id="frameStrip" class="frame-strip">
+                {% for frame in frames %}
+                <img src="{{ url_for('static', filename='frames/' + frame) }}" 
+                     alt="Frame {{ loop.index0 }}" 
+                     data-frame="{{ loop.index0 }}" 
+                     data-time="{{ (loop.index0 / fps) | round(2) }}">
+                {% endfor %}
+            </div>
+
+            <div class="annotation-section">
+                <div id="annotationPanel" class="annotation-panel">
+                    <h2>Create Annotation</h2>
+                    <div class="frame-display">
+                        <div>Start Frame: <span id="startFrameDisplay">---</span></div>
+                        <div>End Frame: <span id="endFrameDisplay">---</span></div>
+                    </div>
+                    <div class="input-group">
+                        <label for="eventTypeInput">Event Type:</label>
+                        <input type="text" id="eventTypeInput" placeholder="Enter event type">
+                    </div>
+                    <div class="input-group">
+                        <label for="notesInput">Notes:</label>
+                        <textarea id="notesInput" rows="3" placeholder="Enter notes about this event"></textarea>
+                    </div>
+                    <button id="addAnnotationBtn" disabled>Add Annotation</button>
+                </div>
+
+                <div class="annotations-list">
+                    <h2>Annotations</h2>
+                    <table id="annotationsTable">
+                        <thead>
+                            <tr>
+                                <th>Start</th>
+                                <th>End</th>
+                                <th>Type</th>
+                                <th>Notes</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Annotation entries will be added here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+
+        <div id="statusMessage" class="status-message"></div>
+    </div>
+    
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+</body>
+</html> 

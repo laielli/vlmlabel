@@ -1,0 +1,310 @@
+document.addEventListener('DOMContentLoaded', function() {
+    // DOM elements
+    const videoPlayer = document.getElementById('videoPlayer');
+    const frameStrip = document.getElementById('frameStrip');
+    const setStartBtn = document.getElementById('setStartBtn');
+    const setEndBtn = document.getElementById('setEndBtn');
+    const startFrameDisplay = document.getElementById('startFrameDisplay');
+    const endFrameDisplay = document.getElementById('endFrameDisplay');
+    const eventTypeInput = document.getElementById('eventTypeInput');
+    const notesInput = document.getElementById('notesInput');
+    const addAnnotationBtn = document.getElementById('addAnnotationBtn');
+    const annotationsTable = document.getElementById('annotationsTable').querySelector('tbody');
+    const saveBtn = document.getElementById('saveBtn');
+    const csvFileInput = document.getElementById('csvFileInput');
+    const statusMessage = document.getElementById('statusMessage');
+    
+    // State variables
+    let annotations = [];
+    let selectedStartFrame = null;
+    let selectedEndFrame = null;
+    let selectedStartElement = null;
+    let selectedEndElement = null;
+    
+    // FPS value from the server (injected by Jinja template)
+    const fps = videoPlayer.getAttribute('data-fps') || 30;
+    
+    // Event handling for frame thumbnails
+    frameStrip.querySelectorAll('img').forEach(img => {
+        img.addEventListener('click', function() {
+            const time = parseFloat(this.dataset.time);
+            videoPlayer.currentTime = time;
+        });
+    });
+    
+    // Set start frame
+    setStartBtn.addEventListener('click', function() {
+        // Get the current frame based on video time
+        const currentTime = videoPlayer.currentTime;
+        const frameNumber = Math.round(currentTime * fps);
+        
+        // Update UI
+        if (selectedStartElement) {
+            selectedStartElement.classList.remove('selected-start');
+        }
+        
+        // Find the closest frame thumbnail and highlight it
+        const closestFrame = findClosestFrameThumbnail(currentTime);
+        if (closestFrame) {
+            closestFrame.classList.add('selected-start');
+            selectedStartElement = closestFrame;
+        }
+        
+        // Update state
+        selectedStartFrame = frameNumber;
+        startFrameDisplay.textContent = frameNumber;
+        
+        // Check if we can enable the Add button
+        checkEnableAddButton();
+    });
+    
+    // Set end frame
+    setEndBtn.addEventListener('click', function() {
+        // Get the current frame based on video time
+        const currentTime = videoPlayer.currentTime;
+        const frameNumber = Math.round(currentTime * fps);
+        
+        // Update UI
+        if (selectedEndElement) {
+            selectedEndElement.classList.remove('selected-end');
+        }
+        
+        // Find the closest frame thumbnail and highlight it
+        const closestFrame = findClosestFrameThumbnail(currentTime);
+        if (closestFrame) {
+            closestFrame.classList.add('selected-end');
+            selectedEndElement = closestFrame;
+        }
+        
+        // Update state
+        selectedEndFrame = frameNumber;
+        endFrameDisplay.textContent = frameNumber;
+        
+        // Check if we can enable the Add button
+        checkEnableAddButton();
+    });
+    
+    // Add annotation to the list
+    addAnnotationBtn.addEventListener('click', function() {
+        const eventType = eventTypeInput.value.trim();
+        const notes = notesInput.value.trim();
+        
+        if (!eventType) {
+            showStatus('Event Type is required', true);
+            return;
+        }
+        
+        // Create new annotation object
+        const annotation = {
+            start: selectedStartFrame,
+            end: selectedEndFrame,
+            type: eventType,
+            notes: notes
+        };
+        
+        // Add to annotations array
+        annotations.push(annotation);
+        
+        // Add to UI table
+        addAnnotationToTable(annotation);
+        
+        // Clear form
+        clearAnnotationForm();
+        
+        showStatus('Annotation added');
+    });
+    
+    // Save annotations to CSV
+    saveBtn.addEventListener('click', function() {
+        if (annotations.length === 0) {
+            showStatus('No annotations to save', true);
+            return;
+        }
+        
+        // Send data to server
+        fetch('/save_annotations', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ annotations: annotations }),
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                showStatus('Annotations saved successfully');
+            } else {
+                showStatus('Error: ' + data.message, true);
+            }
+        })
+        .catch(error => {
+            showStatus('Error saving annotations: ' + error.message, true);
+        });
+    });
+    
+    // Load CSV file
+    csvFileInput.addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        
+        const formData = new FormData();
+        formData.append('file', file);
+        
+        fetch('/load_annotations', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                // Clear existing annotations
+                annotations = [];
+                annotationsTable.innerHTML = '';
+                
+                // Add loaded annotations
+                data.annotations.forEach(annotation => {
+                    annotations.push(annotation);
+                    addAnnotationToTable(annotation);
+                });
+                
+                showStatus(`Loaded ${data.annotations.length} annotations`);
+            } else {
+                showStatus('Error: ' + data.message, true);
+            }
+        })
+        .catch(error => {
+            showStatus('Error loading annotations: ' + error.message, true);
+        });
+    });
+    
+    // Helper functions
+    
+    // Find the closest frame thumbnail to a given time
+    function findClosestFrameThumbnail(time) {
+        let closestFrame = null;
+        let closestDiff = Infinity;
+        
+        frameStrip.querySelectorAll('img').forEach(img => {
+            const frameTime = parseFloat(img.dataset.time);
+            const diff = Math.abs(frameTime - time);
+            
+            if (diff < closestDiff) {
+                closestDiff = diff;
+                closestFrame = img;
+            }
+        });
+        
+        return closestFrame;
+    }
+    
+    // Check if Add button should be enabled
+    function checkEnableAddButton() {
+        if (selectedStartFrame !== null && selectedEndFrame !== null) {
+            addAnnotationBtn.disabled = false;
+        } else {
+            addAnnotationBtn.disabled = true;
+        }
+    }
+    
+    // Clear annotation form
+    function clearAnnotationForm() {
+        selectedStartFrame = null;
+        selectedEndFrame = null;
+        eventTypeInput.value = '';
+        notesInput.value = '';
+        startFrameDisplay.textContent = '---';
+        endFrameDisplay.textContent = '---';
+        
+        if (selectedStartElement) {
+            selectedStartElement.classList.remove('selected-start');
+            selectedStartElement = null;
+        }
+        
+        if (selectedEndElement) {
+            selectedEndElement.classList.remove('selected-end');
+            selectedEndElement = null;
+        }
+        
+        addAnnotationBtn.disabled = true;
+    }
+    
+    // Add annotation to the table
+    function addAnnotationToTable(annotation) {
+        const row = document.createElement('tr');
+        
+        // Create cells for each property
+        const startCell = document.createElement('td');
+        startCell.textContent = annotation.start;
+        row.appendChild(startCell);
+        
+        const endCell = document.createElement('td');
+        endCell.textContent = annotation.end;
+        row.appendChild(endCell);
+        
+        const typeCell = document.createElement('td');
+        typeCell.textContent = annotation.type;
+        row.appendChild(typeCell);
+        
+        const notesCell = document.createElement('td');
+        notesCell.textContent = annotation.notes;
+        row.appendChild(notesCell);
+        
+        // Add delete button
+        const actionCell = document.createElement('td');
+        const deleteBtn = document.createElement('button');
+        deleteBtn.textContent = '✕';
+        deleteBtn.classList.add('delete-btn');
+        deleteBtn.addEventListener('click', function() {
+            // Remove from array
+            const index = annotations.findIndex(a => 
+                a.start === annotation.start && 
+                a.end === annotation.end && 
+                a.type === annotation.type
+            );
+            
+            if (index !== -1) {
+                annotations.splice(index, 1);
+            }
+            
+            // Remove from table
+            row.remove();
+            
+            showStatus('Annotation deleted');
+        });
+        
+        actionCell.appendChild(deleteBtn);
+        row.appendChild(actionCell);
+        
+        // Add row to table
+        annotationsTable.appendChild(row);
+        
+        // Add click event to jump to annotation time
+        row.addEventListener('click', function(e) {
+            // Don't trigger if clicking the delete button
+            if (e.target.classList.contains('delete-btn')) return;
+            
+            // Find the start frame
+            const frameTime = annotation.start / fps;
+            videoPlayer.currentTime = frameTime;
+        });
+    }
+    
+    // Show status message
+    function showStatus(message, isError = false) {
+        statusMessage.textContent = message;
+        
+        if (isError) {
+            statusMessage.classList.add('error');
+        } else {
+            statusMessage.classList.remove('error');
+        }
+        
+        // Show the message
+        statusMessage.style.display = 'block';
+        
+        // Hide after 3 seconds
+        setTimeout(() => {
+            statusMessage.style.display = 'none';
+        }, 3000);
+    }
+}); 
