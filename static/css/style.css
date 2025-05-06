@@ -31,6 +31,29 @@ header {
     margin-bottom: 20px;
     padding-bottom: 15px;
     border-bottom: 1px solid #ddd;
+    flex-wrap: wrap;
+}
+
+/* Video selector */
+.video-selector {
+    display: flex;
+    align-items: center;
+    margin-right: auto;
+    margin-left: 20px;
+}
+
+.video-selector label {
+    margin-right: 10px;
+    font-weight: bold;
+}
+
+.video-selector select {
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    background-color: white;
+    font-size: 14px;
+    min-width: 150px;
 }
 
 .actions {
@@ -210,8 +233,19 @@ table th {
         align-items: flex-start;
     }
     
+    .video-selector {
+        margin: 10px 0;
+        width: 100%;
+    }
+    
+    .video-selector select {
+        width: 100%;
+    }
+    
     .actions {
         margin-top: 10px;
+        width: 100%;
+        justify-content: space-between;
     }
     
     .annotation-section {

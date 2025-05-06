@@ -10,11 +10,21 @@
     <div class="container">
         <header>
             <h1>Video Annotation Tool</h1>
+            <div class="video-selector">
+                <label for="videoSelect">Video:</label>
+                <select id="videoSelect" name="video_id">
+                    {% for vid in video_ids %}
+                    <option value="{{ vid }}" {% if vid == current_video_id %}selected{% endif %}>
+                        {{ vid }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
             <div class="actions">
                 <button id="saveBtn">Save to CSV</button>
                 <label for="csvFileInput" class="button">Load CSV</label>
                 <input type="file" id="csvFileInput" accept=".csv" style="display: none;">
-                <a href="{{ url_for('download_csv') }}" id="downloadBtn" class="button" target="_blank">Download CSV</a>
+                <a href="{{ url_for('download_annotations', video_id=current_video_id) }}" id="downloadBtn" class="button" target="_blank">Download CSV</a>
             </div>
         </header>
 
@@ -32,7 +42,7 @@
 
             <div id="frameStrip" class="frame-strip">
                 {% for frame in frames %}
-                <img src="{{ url_for('static', filename='frames/' + frame) }}" 
+                <img src="{{ url_for('static', filename=frames_path + frame) }}" 
                      alt="Frame {{ loop.index0 }}" 
                      data-frame="{{ loop.index0 }}" 
                      data-time="{{ (loop.index0 / fps) | round(2) }}">
@@ -80,6 +90,11 @@
         <div id="statusMessage" class="status-message"></div>
     </div>
     
+    <!-- Pass video ID to JavaScript -->
+    <script>
+        var currentVideoId = "{{ current_video_id }}";
+        var initialAnnotations = {{ annotations|tojson|safe }};
+    </script>
     <script src="{{ url_for('static', filename='js/script.js') }}"></script>
 </body>
 </html> 

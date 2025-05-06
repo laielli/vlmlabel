@@ -13,6 +13,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const saveBtn = document.getElementById('saveBtn');
     const csvFileInput = document.getElementById('csvFileInput');
     const statusMessage = document.getElementById('statusMessage');
+    const videoSelect = document.getElementById('videoSelect');
     
     // State variables
     let annotations = [];
@@ -21,8 +22,41 @@ document.addEventListener('DOMContentLoaded', function() {
     let selectedStartElement = null;
     let selectedEndElement = null;
     
-    // FPS value from the server (injected by Jinja template)
-    const fps = videoPlayer.getAttribute('data-fps') || 30;
+    // Get current video ID and fps from the data attributes
+    const videoId = currentVideoId || '';
+    const fps = parseInt(videoPlayer.getAttribute('data-fps')) || 30;
+    
+    // Initialize with any existing annotations
+    if (typeof initialAnnotations !== 'undefined' && initialAnnotations.length > 0) {
+        annotations = initialAnnotations;
+        
+        // Add existing annotations to the table
+        annotations.forEach(annotation => {
+            addAnnotationToTable(annotation);
+        });
+        
+        showStatus(`Loaded ${annotations.length} annotations`);
+    }
+    
+    // Handle video selection change
+    if (videoSelect) {
+        videoSelect.addEventListener('change', function() {
+            const selectedVideoId = this.value;
+            if (selectedVideoId && selectedVideoId !== videoId) {
+                // Check if there are unsaved annotations
+                if (annotations.length > 0) {
+                    const confirmed = confirm('You have unsaved annotations. Do you want to switch videos? Your current annotations will be lost.');
+                    if (!confirmed) {
+                        // Reset the dropdown to the current video
+                        videoSelect.value = videoId;
+                        return;
+                    }
+                }
+                // Navigate to the selected video
+                window.location.href = `/video/${selectedVideoId}`;
+            }
+        });
+    }
     
     // Event handling for frame thumbnails
     frameStrip.querySelectorAll('img').forEach(img => {
@@ -122,7 +156,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         
         // Send data to server
-        fetch('/save_annotations', {
+        fetch(`/save_annotations/${videoId}`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -132,7 +166,7 @@ document.addEventListener('DOMContentLoaded', function() {
         .then(response => response.json())
         .then(data => {
             if (data.status === 'success') {
-                showStatus('Annotations saved successfully');
+                showStatus(`Annotations saved successfully as ${data.filename}`);
             } else {
                 showStatus('Error: ' + data.message, true);
             }
@@ -150,7 +184,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const formData = new FormData();
         formData.append('file', file);
         
-        fetch('/load_annotations', {
+        fetch(`/load_annotations/${videoId}`, {
             method: 'POST',
             body: formData
         })
@@ -167,7 +201,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     addAnnotationToTable(annotation);
                 });
                 
-                showStatus(`Loaded ${data.annotations.length} annotations`);
+                showStatus(`Loaded ${data.annotations.length} annotations from ${data.filename}`);
             } else {
                 showStatus('Error: ' + data.message, true);
             }
@@ -175,6 +209,9 @@ document.addEventListener('DOMContentLoaded', function() {
         .catch(error => {
             showStatus('Error loading annotations: ' + error.message, true);
         });
+
+        // Reset file input value to allow loading the same file again
+        this.value = '';
     });
     
     // Helper functions
