@@ -62,7 +62,19 @@ document.addEventListener('DOMContentLoaded', function() {
     frameStrip.querySelectorAll('img').forEach(img => {
         img.addEventListener('click', function() {
             const time = parseFloat(this.dataset.time);
-            videoPlayer.currentTime = time;
+            // Ensure the time is valid and set it
+            if (!isNaN(time) && time >= 0) {
+                // Force the video to seek to the exact time
+                videoPlayer.pause();
+                videoPlayer.currentTime = time;
+                // Optional: Play the video after a small delay to ensure the seek completes
+                setTimeout(() => {
+                    videoPlayer.play().catch(e => {
+                        // Handle any autoplay restrictions
+                        console.log("Could not automatically play after seeking:", e);
+                    });
+                }, 50);
+            }
         });
     });
     
