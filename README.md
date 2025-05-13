@@ -6,6 +6,7 @@ A Flask-based web application for annotating videos by selecting start and end f
 
 - Support for multiple videos with organized file storage
 - Video selection via dropdown menu
+- Automatic video FPS detection for accurate frame timing
 - Play MP4 video and view frame thumbnails in a scrollable timeline
 - Select start and end frames for events
 - Add event type and notes as metadata
@@ -17,7 +18,7 @@ A Flask-based web application for annotating videos by selecting start and end f
 
 - Python 3.6+
 - Flask
-- OpenCV (optional, for frame extraction)
+- OpenCV (required for FPS detection and frame extraction)
 - FFmpeg (optional, recommended for frame extraction)
 
 ## Directory Structure
@@ -63,7 +64,7 @@ Each video has its own folder with its frames and annotations organized separate
    pip install -r requirements.txt
    ```
 
-   If you want to use the included frame extraction script, also install OpenCV:
+   OpenCV is required for FPS detection and frame extraction:
    ```
    pip install opencv-python
    ```
@@ -82,13 +83,14 @@ Each video has its own folder with its frames and annotations organized separate
    ```
    This extracts 1 frame per second. Adjust `-r 1` to change the extraction rate.
    
-   **Option 2: Using the included Python script:**
+   **Option 2: Using the included Python script (with auto FPS detection):**
    ```
-   pip install opencv-python  # if not already installed
    python extract_frames_multi.py --video-id your_video_id
    ```
    
-   Use `python extract_frames_multi.py --help` to see available options.
+   This will automatically detect the video's FPS and extract frames accordingly. You can override with `--fps` option.
+   
+   Use `python extract_frames_multi.py --help` to see all available options.
 
 6. (Optional) To set up sample placeholder directories for testing:
    ```

@@ -4,13 +4,35 @@ import glob
 from datetime import datetime
 from flask import Flask, render_template, request, jsonify, send_file, redirect, url_for
 from werkzeug.utils import secure_filename
+import cv2  # Import OpenCV for video FPS detection
 
 app = Flask(__name__)
 
 # Configuration
 VIDEO_BASE_DIR = os.path.join(app.static_folder, "videos")
 ANNOTATION_BASE_DIR = os.path.join("data", "annotations")
-FPS = 30  # Default FPS, can be overridden
+DEFAULT_FPS = 5  # Default FPS if detection fails
+
+# Function to detect video FPS
+def detect_video_fps(video_path):
+    """Detect the FPS of a video file using OpenCV"""
+    try:
+        video = cv2.VideoCapture(video_path)
+        if not video.isOpened():
+            return DEFAULT_FPS
+        
+        # Get FPS from the video
+        fps = video.get(cv2.CAP_PROP_FPS)
+        video.release()
+        
+        # If FPS is unreasonably low or high, use default
+        if fps < 1 or fps > 120:
+            return DEFAULT_FPS
+            
+        return round(fps)
+    except Exception as e:
+        print(f"Error detecting video FPS: {e}")
+        return DEFAULT_FPS
 
 @app.route('/')
 def index():
@@ -43,6 +65,9 @@ def annotate_video(video_id):
     if not os.path.exists(video_file):
         return render_template('error.html', message=f"Video file not found for '{video_id}'. Please ensure video.mp4 exists in the directory.")
     
+    # Detect FPS from the video file
+    fps = detect_video_fps(video_file)
+    
     # Get list of frame images from frames directory
     frames_path = os.path.join(video_path, "frames")
     
@@ -74,7 +99,7 @@ def annotate_video(video_id):
                           video_file=video_url, 
                           frames=frames, 
                           frames_path=frames_relative_path,
-                          fps=FPS,
+                          fps=fps,
                           annotations=annotations)
 
 @app.route('/save_annotations/<video_id>', methods=['POST'])

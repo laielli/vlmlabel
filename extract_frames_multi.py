@@ -12,7 +12,7 @@ Options:
   --video-id ID        ID of the video (required)
   --video-path PATH    Path to the video file (default: static/videos/VIDEO_ID/video.mp4)
   --output-dir PATH    Directory to save frames (default: static/videos/VIDEO_ID/frames)
-  --fps RATE           Frames per second to extract (default: 1)
+  --fps RATE           Frames per second to extract (default: auto-detect from video)
   --help               Show this help message
 """
 
@@ -25,7 +25,7 @@ def print_help():
     """Print help message"""
     print(__doc__)
 
-def extract_frames(video_id, video_path=None, output_dir=None, target_fps=1):
+def extract_frames(video_id, video_path=None, output_dir=None, target_fps=None):
     """Extract frames from a video at the specified rate"""
     # Set default paths based on video_id if not provided
     if video_path is None:
@@ -48,10 +48,15 @@ def extract_frames(video_id, video_path=None, output_dir=None, target_fps=1):
     total_frames = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
     duration = total_frames / fps
     
+    # If target_fps is not specified, use the video's native fps
+    if target_fps is None:
+        target_fps = fps
+        print(f"Auto-detected video FPS: {fps}")
+    
     print(f"Video ID: {video_id}")
     print(f"Video path: {video_path}")
     print(f"Output directory: {output_dir}")
-    print(f"FPS: {fps}")
+    print(f"Video FPS: {fps}")
     print(f"Total frames: {total_frames}")
     print(f"Duration: {duration:.2f} seconds")
     print(f"Extracting frames at {target_fps} fps")
@@ -95,7 +100,7 @@ def main():
     video_id = None
     video_path = None
     output_dir = None
-    target_fps = 1
+    target_fps = None  # None means auto-detect
     
     # Parse command line arguments
     try:

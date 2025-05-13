@@ -97,6 +97,16 @@ button:disabled {
     display: flex;
     gap: 10px;
     margin-top: 10px;
+    align-items: center;
+}
+
+.fps-display {
+    margin-left: auto;
+    background-color: #f8f9fa;
+    padding: 5px 10px;
+    border-radius: 4px;
+    font-size: 14px;
+    color: #666;
 }
 
 /* Frame strip */

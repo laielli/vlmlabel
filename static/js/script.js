@@ -24,7 +24,21 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Get current video ID and fps from the data attributes
     const videoId = currentVideoId || '';
-    const fps = parseInt(videoPlayer.getAttribute('data-fps')) || 30;
+    let fps = parseInt(videoPlayer.getAttribute('data-fps')) || 5;
+    
+    // Display the detected FPS
+    console.log(`Using video FPS: ${fps}`);
+    
+    // Add event listener for video metadata loaded to verify FPS
+    videoPlayer.addEventListener('loadedmetadata', function() {
+        // The backend has already detected the FPS, but we can verify it here
+        console.log(`Video loaded. Using FPS: ${fps}`);
+        
+        // Optional: Show FPS in the UI
+        if (document.getElementById('fpsDisplay')) {
+            document.getElementById('fpsDisplay').textContent = fps;
+        }
+    });
     
     // Initialize with any existing annotations
     if (typeof initialAnnotations !== 'undefined' && initialAnnotations.length > 0) {
