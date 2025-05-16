@@ -181,6 +181,35 @@ button:disabled {
     font-size: 14px;
 }
 
+/* Button group for annotation actions */
+.button-group {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+#addAnnotationBtn {
+    background-color: #3498db;
+}
+
+#saveAsNewBtn {
+    background-color: #2ecc71;
+}
+
+#cancelEditBtn {
+    background-color: #95a5a6;
+}
+
+/* Highlight for the annotation being edited */
+tr.editing {
+    background-color: #fffde7;
+    box-shadow: 0 0 5px rgba(0, 0, 0, 0.1);
+}
+
+tr.editing td {
+    font-weight: 500;
+}
+
 /* Annotations list */
 .annotations-list {
     flex: 2;
@@ -204,6 +233,12 @@ table th, table td {
 table th {
     background-color: #f8f9fa;
     font-weight: bold;
+}
+
+.timestamp {
+    color: #666;
+    font-size: 0.9em;
+    margin-left: 4px;
 }
 
 .delete-btn {

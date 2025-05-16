@@ -52,7 +52,7 @@
 
             <div class="annotation-section">
                 <div id="annotationPanel" class="annotation-panel">
-                    <h2>Create Annotation</h2>
+                    <h2 id="annotationPanelTitle">Create Annotation</h2>
                     <div class="frame-display">
                         <div>Start Frame: <span id="startFrameDisplay">---</span></div>
                         <div>End Frame: <span id="endFrameDisplay">---</span></div>
@@ -65,7 +65,11 @@
                         <label for="notesInput">Notes:</label>
                         <textarea id="notesInput" rows="3" placeholder="Enter notes about this event"></textarea>
                     </div>
-                    <button id="addAnnotationBtn" disabled>Add Annotation</button>
+                    <div class="button-group">
+                        <button id="addAnnotationBtn" disabled>Add Annotation</button>
+                        <button id="saveAsNewBtn" style="display: none;">Save as New</button>
+                        <button id="cancelEditBtn" style="display: none;">Cancel</button>
+                    </div>
                 </div>
 
                 <div class="annotations-list">

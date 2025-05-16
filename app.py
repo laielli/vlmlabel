@@ -123,10 +123,11 @@ def save_annotations(video_id):
         # Write annotations to CSV
         with open(csv_path, 'w', newline='') as csvfile:
             writer = csv.writer(csvfile)
-            writer.writerow(['start_frame', 'end_frame', 'event_type', 'notes'])  # Header
+            writer.writerow(['id', 'start_frame', 'end_frame', 'event_type', 'notes'])  # Header
             
             for annotation in annotations:
                 writer.writerow([
+                    annotation.get('id', ''),
                     annotation['start'],
                     annotation['end'],
                     annotation['type'],
@@ -245,14 +246,27 @@ def parse_annotation_file(file_path):
         
         # Skip header row if present
         header = next(reader, None)
-        if not header or not all(col in ['start_frame', 'end_frame', 'event_type', 'notes'] for col in header):
+        has_id_column = header and 'id' in header
+        
+        if not header or not all(col in header for col in ['start_frame', 'end_frame', 'event_type', 'notes']):
             # If not a proper header with expected columns, reopen and read all rows
             csvfile.seek(0)
             reader = csv.reader(csvfile)
+            has_id_column = False
         
         for row in reader:
-            if len(row) >= 4 and row[0].isdigit() and row[1].isdigit():
+            if has_id_column and len(row) >= 5 and row[1].isdigit() and row[2].isdigit():
                 annotations.append({
+                    'id': row[0] if row[0] else None,
+                    'start': int(row[1]),
+                    'end': int(row[2]),
+                    'type': row[3],
+                    'notes': row[4]
+                })
+            elif len(row) >= 4 and row[0].isdigit() and row[1].isdigit():
+                # No ID column, use the old format
+                annotations.append({
+                    'id': None,  # No ID available
                     'start': int(row[0]),
                     'end': int(row[1]),
                     'type': row[2],

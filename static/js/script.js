@@ -14,6 +14,9 @@ document.addEventListener('DOMContentLoaded', function() {
     const csvFileInput = document.getElementById('csvFileInput');
     const statusMessage = document.getElementById('statusMessage');
     const videoSelect = document.getElementById('videoSelect');
+    const annotationPanelTitle = document.getElementById('annotationPanelTitle');
+    const cancelEditBtn = document.getElementById('cancelEditBtn');
+    const saveAsNewBtn = document.getElementById('saveAsNewBtn');
     
     // State variables
     let annotations = [];
@@ -21,6 +24,8 @@ document.addEventListener('DOMContentLoaded', function() {
     let selectedEndFrame = null;
     let selectedStartElement = null;
     let selectedEndElement = null;
+    let currentEditingAnnotation = null;
+    let currentEditingRow = null;
     
     // Get current video ID and fps from the data attributes
     const videoId = currentVideoId || '';
@@ -43,6 +48,9 @@ document.addEventListener('DOMContentLoaded', function() {
     // Initialize with any existing annotations
     if (typeof initialAnnotations !== 'undefined' && initialAnnotations.length > 0) {
         annotations = initialAnnotations;
+        
+        // Sort annotations before adding to the table
+        sortAnnotations();
         
         // Add existing annotations to the table
         annotations.forEach(annotation => {
@@ -82,12 +90,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 videoPlayer.pause();
                 videoPlayer.currentTime = time;
                 // Optional: Play the video after a small delay to ensure the seek completes
-                setTimeout(() => {
-                    videoPlayer.play().catch(e => {
-                        // Handle any autoplay restrictions
-                        console.log("Could not automatically play after seeking:", e);
-                    });
-                }, 50);
+                // setTimeout(() => {
+                //     videoPlayer.play().catch(e => {
+                //         // Handle any autoplay restrictions
+                //         console.log("Could not automatically play after seeking:", e);
+                //     });
+                // }, 50);
             }
         });
     });
@@ -144,7 +152,7 @@ document.addEventListener('DOMContentLoaded', function() {
         checkEnableAddButton();
     });
     
-    // Add annotation to the list
+    // Add or update annotation
     addAnnotationBtn.addEventListener('click', function() {
         const eventType = eventTypeInput.value.trim();
         const notes = notesInput.value.trim();
@@ -154,25 +162,97 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
         
-        // Create new annotation object
-        const annotation = {
-            start: selectedStartFrame,
-            end: selectedEndFrame,
-            type: eventType,
-            notes: notes
-        };
-        
-        // Add to annotations array
-        annotations.push(annotation);
-        
-        // Add to UI table
-        addAnnotationToTable(annotation);
-        
-        // Clear form
-        clearAnnotationForm();
-        
-        showStatus('Annotation added');
+        if (currentEditingAnnotation) {
+            // Update existing annotation
+            currentEditingAnnotation.start = selectedStartFrame;
+            currentEditingAnnotation.end = selectedEndFrame;
+            currentEditingAnnotation.type = eventType;
+            currentEditingAnnotation.notes = notes;
+            
+            // Remove the old row
+            if (currentEditingRow) {
+                currentEditingRow.remove();
+            }
+            
+            // Add updated row
+            addAnnotationToTable(currentEditingAnnotation);
+            
+            // Resort annotations
+            sortAnnotations();
+            refreshAnnotationsList();
+            
+            showStatus('Annotation updated');
+            
+            // Clear form but stay in edit mode
+            exitEditMode();
+        } else {
+            // Create new annotation object
+            const annotation = {
+                id: Date.now(), // Simple unique ID based on timestamp
+                start: selectedStartFrame,
+                end: selectedEndFrame,
+                type: eventType,
+                notes: notes
+            };
+            
+            // Add to annotations array
+            annotations.push(annotation);
+            
+            // Sort annotations
+            sortAnnotations();
+            
+            // Refresh the list
+            refreshAnnotationsList();
+            
+            // Clear form
+            clearAnnotationForm();
+            
+            showStatus('Annotation added');
+        }
     });
+    
+    // Save as new annotation
+    if (saveAsNewBtn) {
+        saveAsNewBtn.addEventListener('click', function() {
+            const eventType = eventTypeInput.value.trim();
+            const notes = notesInput.value.trim();
+            
+            if (!eventType) {
+                showStatus('Event Type is required', true);
+                return;
+            }
+            
+            // Create new annotation object
+            const annotation = {
+                id: Date.now(), // Simple unique ID based on timestamp
+                start: selectedStartFrame,
+                end: selectedEndFrame,
+                type: eventType,
+                notes: notes
+            };
+            
+            // Add to annotations array
+            annotations.push(annotation);
+            
+            // Sort annotations
+            sortAnnotations();
+            
+            // Refresh the list
+            refreshAnnotationsList();
+            
+            // Exit edit mode
+            exitEditMode();
+            
+            showStatus('New annotation created');
+        });
+    }
+    
+    // Cancel editing
+    if (cancelEditBtn) {
+        cancelEditBtn.addEventListener('click', function() {
+            exitEditMode();
+        });
+    }
     
     // Save annotations to CSV
     saveBtn.addEventListener('click', function() {
@@ -221,11 +301,19 @@ document.addEventListener('DOMContentLoaded', function() {
                 annotations = [];
                 annotationsTable.innerHTML = '';
                 
-                // Add loaded annotations
+                // Add loaded annotations and assign IDs if they don't have them
                 data.annotations.forEach(annotation => {
+                    if (!annotation.id) {
+                        annotation.id = Date.now() + Math.random();
+                    }
                     annotations.push(annotation);
-                    addAnnotationToTable(annotation);
                 });
+                
+                // Sort annotations
+                sortAnnotations();
+                
+                // Refresh the list
+                refreshAnnotationsList();
                 
                 showStatus(`Loaded ${data.annotations.length} annotations from ${data.filename}`);
             } else {
@@ -241,6 +329,108 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     
     // Helper functions
+    
+    // Sort annotations by start frame (ascending) and duration (descending)
+    function sortAnnotations() {
+        annotations.sort((a, b) => {
+            // First sort by start frame (ascending)
+            const startFrameComparison = a.start - b.start;
+            
+            // If start frames are the same, sort by duration (descending)
+            if (startFrameComparison === 0) {
+                const durationA = a.end - a.start;
+                const durationB = b.end - b.start;
+                return durationB - durationA; // Descending order
+            }
+            
+            return startFrameComparison;
+        });
+    }
+    
+    // Refresh the annotations list in the UI
+    function refreshAnnotationsList() {
+        // Clear the table
+        annotationsTable.innerHTML = '';
+        
+        // Add all annotations in sorted order
+        annotations.forEach(annotation => {
+            addAnnotationToTable(annotation);
+        });
+        
+        // If we were editing an annotation, highlight it again
+        if (currentEditingAnnotation) {
+            const rows = annotationsTable.querySelectorAll('tr');
+            rows.forEach(row => {
+                if (row.dataset.annotationId === currentEditingAnnotation.id.toString()) {
+                    row.classList.add('editing');
+                    currentEditingRow = row;
+                }
+            });
+        }
+    }
+    
+    // Enter edit mode for an annotation
+    function enterEditMode(annotation, row) {
+        // Store the annotation being edited
+        currentEditingAnnotation = annotation;
+        currentEditingRow = row;
+        
+        // Update form title
+        if (annotationPanelTitle) {
+            annotationPanelTitle.textContent = 'Edit Annotation';
+        }
+        
+        // Fill form with annotation data
+        selectedStartFrame = annotation.start;
+        selectedEndFrame = annotation.end;
+        startFrameDisplay.textContent = annotation.start;
+        endFrameDisplay.textContent = annotation.end;
+        eventTypeInput.value = annotation.type;
+        notesInput.value = annotation.notes;
+        
+        // Enable the add/update button
+        addAnnotationBtn.disabled = false;
+        
+        // Show edit mode buttons
+        if (cancelEditBtn) cancelEditBtn.style.display = 'inline-block';
+        if (saveAsNewBtn) saveAsNewBtn.style.display = 'inline-block';
+        
+        // Change primary button text
+        addAnnotationBtn.textContent = 'Update Annotation';
+        
+        // Highlight the row being edited
+        row.classList.add('editing');
+        
+        // Optionally, scroll to the annotation form
+        document.getElementById('annotationPanel').scrollIntoView({ behavior: 'smooth' });
+    }
+    
+    // Exit edit mode
+    function exitEditMode() {
+        // Reset editing state
+        currentEditingAnnotation = null;
+        
+        // Remove highlight from the row
+        if (currentEditingRow) {
+            currentEditingRow.classList.remove('editing');
+            currentEditingRow = null;
+        }
+        
+        // Update form title
+        if (annotationPanelTitle) {
+            annotationPanelTitle.textContent = 'Create Annotation';
+        }
+        
+        // Reset form
+        clearAnnotationForm();
+        
+        // Hide edit mode buttons
+        if (cancelEditBtn) cancelEditBtn.style.display = 'none';
+        if (saveAsNewBtn) saveAsNewBtn.style.display = 'none';
+        
+        // Change primary button text back
+        addAnnotationBtn.textContent = 'Add Annotation';
+    }
     
     // Find the closest frame thumbnail to a given time
     function findClosestFrameThumbnail(time) {
@@ -295,13 +485,22 @@ document.addEventListener('DOMContentLoaded', function() {
     function addAnnotationToTable(annotation) {
         const row = document.createElement('tr');
         
+        // Add annotation ID as data attribute for easy reference
+        if (annotation.id) {
+            row.dataset.annotationId = annotation.id;
+        }
+        
         // Create cells for each property
         const startCell = document.createElement('td');
-        startCell.textContent = annotation.start;
+        const startFrame = annotation.start;
+        const startTime = (startFrame / fps).toFixed(2);
+        startCell.innerHTML = `${startFrame} <span class="timestamp">(${startTime}s)</span>`;
         row.appendChild(startCell);
         
         const endCell = document.createElement('td');
-        endCell.textContent = annotation.end;
+        const endFrame = annotation.end;
+        const endTime = (endFrame / fps).toFixed(2);
+        endCell.innerHTML = `${endFrame} <span class="timestamp">(${endTime}s)</span>`;
         row.appendChild(endCell);
         
         const typeCell = document.createElement('td');
@@ -317,12 +516,15 @@ document.addEventListener('DOMContentLoaded', function() {
         const deleteBtn = document.createElement('button');
         deleteBtn.textContent = '✕';
         deleteBtn.classList.add('delete-btn');
-        deleteBtn.addEventListener('click', function() {
+        deleteBtn.addEventListener('click', function(e) {
+            e.stopPropagation(); // Prevent row click
+            
             // Remove from array
             const index = annotations.findIndex(a => 
-                a.start === annotation.start && 
+                (a.id && a.id === annotation.id) || 
+                (a.start === annotation.start && 
                 a.end === annotation.end && 
-                a.type === annotation.type
+                a.type === annotation.type)
             );
             
             if (index !== -1) {
@@ -331,6 +533,15 @@ document.addEventListener('DOMContentLoaded', function() {
             
             // Remove from table
             row.remove();
+            
+            // If this was the annotation being edited, exit edit mode
+            if (currentEditingAnnotation && 
+                ((currentEditingAnnotation.id && currentEditingAnnotation.id === annotation.id) || 
+                 (currentEditingAnnotation.start === annotation.start && 
+                  currentEditingAnnotation.end === annotation.end && 
+                  currentEditingAnnotation.type === annotation.type))) {
+                exitEditMode();
+            }
             
             showStatus('Annotation deleted');
         });
@@ -341,12 +552,15 @@ document.addEventListener('DOMContentLoaded', function() {
         // Add row to table
         annotationsTable.appendChild(row);
         
-        // Add click event to jump to annotation time
+        // Add click event for editing and jumping to time
         row.addEventListener('click', function(e) {
             // Don't trigger if clicking the delete button
             if (e.target.classList.contains('delete-btn')) return;
             
-            // Find the start frame
+            // Load annotation for editing
+            enterEditMode(annotation, row);
+            
+            // Find the start frame and jump to it
             const frameTime = annotation.start / fps;
             videoPlayer.currentTime = frameTime;
         });
