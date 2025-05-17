@@ -26,6 +26,7 @@ document.addEventListener('DOMContentLoaded', function() {
     let selectedEndElement = null;
     let currentEditingAnnotation = null;
     let currentEditingRow = null;
+    let currentFrameElement = null;
     
     // Get current video ID and fps from the data attributes
     const videoId = currentVideoId || '';
@@ -44,6 +45,62 @@ document.addEventListener('DOMContentLoaded', function() {
             document.getElementById('fpsDisplay').textContent = fps;
         }
     });
+    
+    // Add event listener for timeupdate to highlight current frame
+    videoPlayer.addEventListener('timeupdate', function() {
+        const currentTime = videoPlayer.currentTime;
+        highlightCurrentFrame(currentTime);
+    });
+    
+    // Function to highlight the current frame in the timeline
+    function highlightCurrentFrame(currentTime) {
+        // Remove existing current-frame highlight
+        if (currentFrameElement) {
+            currentFrameElement.classList.remove('current-frame');
+        }
+        
+        // Find the closest frame to the current time
+        const frames = frameStrip.querySelectorAll('img');
+        let closestFrame = null;
+        let closestDiff = Infinity;
+        
+        frames.forEach(img => {
+            const time = parseFloat(img.dataset.time);
+            const diff = Math.abs(time - currentTime);
+            
+            if (diff < closestDiff) {
+                closestDiff = diff;
+                closestFrame = img;
+            }
+        });
+        
+        // Highlight the closest frame
+        if (closestFrame) {
+            closestFrame.classList.add('current-frame');
+            currentFrameElement = closestFrame;
+            
+            // Check if the frame is near the edge of the visible area
+            const frameRect = closestFrame.getBoundingClientRect();
+            const stripRect = frameStrip.getBoundingClientRect();
+            
+            // Calculate how close to the edge the frame is (as a percentage of the strip width)
+            const leftEdgeDistance = frameRect.left - stripRect.left;
+            const rightEdgeDistance = stripRect.right - frameRect.right;
+            const stripWidth = stripRect.width;
+            
+            // If the frame is within 20% of either edge, scroll to center it
+            if (leftEdgeDistance < stripWidth * 0.2 || rightEdgeDistance < stripWidth * 0.2) {
+                // Only scroll during actual playback, not when seeking
+                if (!videoPlayer.paused) {
+                    closestFrame.scrollIntoView({ 
+                        behavior: 'smooth', 
+                        block: 'nearest', 
+                        inline: 'center' 
+                    });
+                }
+            }
+        }
+    }
     
     // Initialize with any existing annotations
     if (typeof initialAnnotations !== 'undefined' && initialAnnotations.length > 0) {
@@ -410,8 +467,51 @@ document.addEventListener('DOMContentLoaded', function() {
         // Highlight the row being edited
         row.classList.add('editing');
         
+        // Highlight the start and end frames in the timeline
+        highlightFrameInTimeline(annotation.start, 'selected-start');
+        highlightFrameInTimeline(annotation.end, 'selected-end');
+        
         // Optionally, scroll to the annotation form
         document.getElementById('annotationPanel').scrollIntoView({ behavior: 'smooth' });
+    }
+    
+    // Helper function to highlight a frame in the timeline
+    function highlightFrameInTimeline(frameNumber, className) {
+        // Remove existing highlights of this class
+        frameStrip.querySelectorAll('img.' + className).forEach(img => {
+            img.classList.remove(className);
+        });
+        
+        // Find the closest frame to the given frame number
+        const frameTime = frameNumber / fps;
+        const frames = frameStrip.querySelectorAll('img');
+        let closestFrame = null;
+        let closestDiff = Infinity;
+        
+        frames.forEach(img => {
+            const time = parseFloat(img.dataset.time);
+            const diff = Math.abs(time - frameTime);
+            
+            if (diff < closestDiff) {
+                closestDiff = diff;
+                closestFrame = img;
+            }
+        });
+        
+        // Highlight the closest frame
+        if (closestFrame) {
+            closestFrame.classList.add(className);
+            
+            // Store reference if it's a start or end frame
+            if (className === 'selected-start') {
+                selectedStartElement = closestFrame;
+            } else if (className === 'selected-end') {
+                selectedEndElement = closestFrame;
+            }
+            
+            // Scroll the frame into view
+            closestFrame.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+        }
     }
     
     // Exit edit mode

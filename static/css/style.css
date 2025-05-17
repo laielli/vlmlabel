@@ -141,6 +141,22 @@ button:disabled {
     border-color: #e74c3c;
 }
 
+.frame-strip img.current-frame {
+    border-color: #3498db;
+    box-shadow: 0 0 8px rgba(52, 152, 219, 0.8);
+}
+
+/* When a frame is both current and selected, prioritize the selection border */
+.frame-strip img.current-frame.selected-start {
+    border-color: #2ecc71;
+    box-shadow: 0 0 8px rgba(46, 204, 113, 0.8);
+}
+
+.frame-strip img.current-frame.selected-end {
+    border-color: #e74c3c;
+    box-shadow: 0 0 8px rgba(231, 76, 60, 0.8);
+}
+
 /* Annotation section */
 .annotation-section {
     display: flex;
