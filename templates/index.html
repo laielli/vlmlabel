@@ -98,6 +98,8 @@
     <!-- Pass video ID to JavaScript -->
     <script>
         var currentVideoId = "{{ current_video_id }}";
+    </script>
+    <script>
         var initialAnnotations = {{ annotations|tojson|safe }};
     </script>
     <script src="{{ url_for('static', filename='js/script.js') }}"></script>

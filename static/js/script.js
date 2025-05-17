@@ -361,6 +361,10 @@ document.addEventListener('DOMContentLoaded', function() {
         if (currentEditingAnnotation) {
             const rows = annotationsTable.querySelectorAll('tr');
             rows.forEach(row => {
+                // Remove any existing highlights first
+                row.classList.remove('editing');
+                
+                // Add highlight only to the currently edited annotation
                 if (row.dataset.annotationId === currentEditingAnnotation.id.toString()) {
                     row.classList.add('editing');
                     currentEditingRow = row;
@@ -371,6 +375,11 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Enter edit mode for an annotation
     function enterEditMode(annotation, row) {
+        // Remove highlight from the previously edited row
+        if (currentEditingRow) {
+            currentEditingRow.classList.remove('editing');
+        }
+        
         // Store the annotation being edited
         currentEditingAnnotation = annotation;
         currentEditingRow = row;
@@ -414,6 +423,12 @@ document.addEventListener('DOMContentLoaded', function() {
         if (currentEditingRow) {
             currentEditingRow.classList.remove('editing');
             currentEditingRow = null;
+        } else {
+            // If currentEditingRow is not set for some reason, remove highlight from all rows
+            const rows = annotationsTable.querySelectorAll('tr');
+            rows.forEach(row => {
+                row.classList.remove('editing');
+            });
         }
         
         // Update form title
@@ -556,6 +571,18 @@ document.addEventListener('DOMContentLoaded', function() {
         row.addEventListener('click', function(e) {
             // Don't trigger if clicking the delete button
             if (e.target.classList.contains('delete-btn')) return;
+            
+            // Check if this is already the row being edited
+            if (currentEditingAnnotation && 
+                ((currentEditingAnnotation.id && annotation.id && currentEditingAnnotation.id === annotation.id) || 
+                 (currentEditingAnnotation.start === annotation.start && 
+                  currentEditingAnnotation.end === annotation.end && 
+                  currentEditingAnnotation.type === annotation.type))) {
+                // Just jump to the time without re-entering edit mode
+                const frameTime = annotation.start / fps;
+                videoPlayer.currentTime = frameTime;
+                return;
+            }
             
             // Load annotation for editing
             enterEditMode(annotation, row);
