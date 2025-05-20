@@ -75,9 +75,13 @@ def load_annotations():
         annotations = []
         csv_file = file.stream.read().decode('utf-8').splitlines()
         reader = csv.reader(csv_file)
-        
+
+        # Attempt to read first row to check for empty file
+        first_row = next(reader, None)
+        if first_row is None:
+            return jsonify({'status': 'error', 'message': 'Empty CSV file'}), 400
+
         # Skip header if present
-        first_row = next(reader)
         if not all(h.isdigit() for h in first_row[:2]):  # If first/second cols aren't numbers, it's a header
             pass  # Skip header
         else:
