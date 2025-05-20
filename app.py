@@ -91,12 +91,13 @@ def load_annotations():
         
         # Process remaining rows
         for row in reader:
-            if len(row) >= 4:
+            # Only start and end frame are required
+            if len(row) >= 2:
                 annotations.append({
                     'start': int(row[0]),
                     'end': int(row[1]),
-                    'type': row[2],
-                    'notes': row[3]
+                    'type': row[2] if len(row) > 2 else '',
+                    'notes': row[3] if len(row) > 3 else ''
                 })
         
         return jsonify({'status': 'success', 'annotations': annotations})
