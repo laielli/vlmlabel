@@ -33,10 +33,8 @@ A Flask-based web application for annotating videos by selecting start and end f
    pip install -r requirements.txt
    ```
 
-   If you want to use the included frame extraction script, also install OpenCV:
-   ```
-   pip install opencv-python
-   ```
+   The `requirements.txt` already includes `opencv-python` for the optional
+   frame extraction script.
 
 4. Prepare your video:
    - Place your MP4 video in the `static/` directory
@@ -53,8 +51,7 @@ A Flask-based web application for annotating videos by selecting start and end f
    
    **Option 2: Using the included Python script:**
    ```
-   pip install opencv-python  # if not already installed
-   python extract_frames.py 
+   python extract_frames.py
    ```
    
    Use `python extract_frames.py --help` to see available options.
