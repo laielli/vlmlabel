@@ -48,6 +48,41 @@ def detect_video_fps(video_path):
         print(f"Error detecting video FPS: {e}")
         return DEFAULT_FPS
 
+# Function to parse time string to seconds
+def time_to_seconds(time_str):
+    """Convert time string (HH:MM:SS.S) to seconds"""
+    try:
+        # Split by : and .
+        parts = time_str.split(':')
+        seconds_parts = parts[-1].split('.')
+        
+        hours = int(parts[0]) if len(parts) > 2 else 0
+        minutes = int(parts[-2] if len(parts) > 1 else parts[0])
+        seconds = int(seconds_parts[0])
+        milliseconds = int(seconds_parts[1]) if len(seconds_parts) > 1 else 0
+        
+        total_seconds = hours * 3600 + minutes * 60 + seconds + milliseconds / 10
+        return total_seconds
+    except Exception as e:
+        print(f"Error parsing time string '{time_str}': {e}")
+        return 0
+
+# Function to compute frame offset for clip variants
+def get_clip_start_frame(video_id, clip_name):
+    """Get the start frame (in canonical timeline) for a clip"""
+    canonical_fps = get_canonical_fps(video_id)
+    
+    # Find clip in config
+    for video in config.get('videos', []):
+        if video.get('id') == video_id:
+            for clip in video.get('clips', []):
+                if clip.get('name') == clip_name:
+                    start_time = clip.get('start')
+                    if start_time:
+                        start_seconds = time_to_seconds(start_time)
+                        return round(start_seconds * canonical_fps)
+    return 0  # Default to 0 for full video or if clip not found
+
 @app.route('/')
 def index():
     """Display a list of available videos for selection"""
@@ -129,6 +164,18 @@ def annotate_video(video_id):
     # Get canonical FPS for timeline mapping
     canonical_fps = get_canonical_fps(video_id)
     
+    # Get clip start frame for proper mapping
+    clip_start_frame = 0
+    if '_' in variant:
+        parts = variant.split('_')
+        if len(parts) >= 2 and parts[0] != 'full':
+            # This is a clip variant
+            clip_name = parts[0]
+            clip_start_frame = get_clip_start_frame(video_id, clip_name)
+    
+    # Get variant structure for grouped dropdown
+    variant_groups = get_variant_groups(video_id)
+    
     return render_template('index.html', 
                           video_ids=video_ids,
                           current_video_id=video_id,
@@ -138,7 +185,9 @@ def annotate_video(video_id):
                           fps=variant_fps,
                           canonical_fps=canonical_fps,
                           variants=variants,
+                          variant_groups=variant_groups,
                           current_variant=variant,
+                          clip_start_frame=clip_start_frame,
                           annotations=annotations)
 
 @app.route('/save_annotations/<video_id>', methods=['POST'])
@@ -324,16 +373,24 @@ def extract_frames(video_id, fps=1):
 # Helper function to get variant information for a video
 def get_variants_for_video(video_id):
     """Get available variants for a video from config"""
+    variants = []
+    
     # Check in config
     for video in config.get('videos', []):
         if video.get('id') == video_id:
-            variants = []
+            # Add full video variants
             for fps in video.get('fps_variants', []):
                 variants.append(f"full_{fps}")
+            
+            # Add clip variants
+            for clip in video.get('clips', []):
+                clip_name = clip.get('name')
+                for fps in clip.get('fps', []):
+                    variants.append(f"{clip_name}_{fps}")
+            
             return variants
     
     # Fallback: Look for variant files in the directory
-    variants = []
     video_dir = os.path.join(VIDEO_BASE_DIR, video_id)
     if os.path.exists(video_dir):
         for file in os.listdir(video_dir):
@@ -346,6 +403,49 @@ def get_variants_for_video(video_id):
         variants.append("full_30")  # Default legacy variant
     
     return variants
+
+# Helper function to get the variant groups for the UI dropdown
+def get_variant_groups(video_id):
+    """Get variant groups for a video from config"""
+    variant_groups = {}
+    
+    # Check in config
+    for video in config.get('videos', []):
+        if video.get('id') == video_id:
+            # Add full video variants
+            full_variants = []
+            for fps in video.get('fps_variants', []):
+                full_variants.append({
+                    'key': f"full_{fps}",
+                    'label': f"{fps} FPS"
+                })
+            
+            if full_variants:
+                variant_groups['Full Video'] = full_variants
+            
+            # Add clip variants
+            for clip in video.get('clips', []):
+                clip_name = clip.get('name')
+                clip_label = clip.get('label', clip_name.replace('_', ' ').title())
+                
+                clip_variants = []
+                for fps in clip.get('fps', []):
+                    clip_variants.append({
+                        'key': f"{clip_name}_{fps}",
+                        'label': f"{fps} FPS"
+                    })
+                
+                if clip_variants:
+                    variant_groups[clip_label] = clip_variants
+            
+            return variant_groups
+    
+    # Fallback: Create a simple group from flat list
+    variants = get_variants_for_video(video_id)
+    if variants:
+        variant_groups['Variants'] = [{'key': v, 'label': v} for v in variants]
+    
+    return variant_groups
 
 # Helper function to get canonical variant for a video
 def get_canonical_variant(video_id):
@@ -373,7 +473,7 @@ def get_variant_fps(video_id, variant):
     """Get FPS for a specific variant"""
     if variant and '_' in variant:
         try:
-            return int(variant.split('_')[1])
+            return int(variant.split('_')[-1])  # Get FPS from last part of variant key
         except (IndexError, ValueError):
             pass
     

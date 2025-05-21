@@ -22,10 +22,14 @@
                 
                 <label for="variantSelect">Variant:</label>
                 <select id="variantSelect" name="variant">
-                    {% for var in variants %}
-                    <option value="{{ var }}" {% if var == current_variant %}selected{% endif %}>
-                        {{ var }}
-                    </option>
+                    {% for group_name, group_variants in variant_groups.items() %}
+                    <optgroup label="{{ group_name }}">
+                        {% for variant in group_variants %}
+                        <option value="{{ variant.key }}" {% if variant.key == current_variant %}selected{% endif %}>
+                            {{ variant.label }}
+                        </option>
+                        {% endfor %}
+                    </optgroup>
                     {% endfor %}
                 </select>
             </div>
@@ -106,11 +110,12 @@
     
     <!-- Pass video ID and variant info to JavaScript -->
     <script>
-        var currentVideoId = "{{ current_video_id }}";
-        var currentVariant = "{{ current_variant }}";
-        var variantFPS = {{ fps }};
-        var canonicalFPS = {{ canonical_fps }};
-        var initialAnnotations = {{ annotations|tojson|safe }};
+        const currentVideoId = "{{ current_video_id }}";
+        const currentVariant = "{{ current_variant }}";
+        const variantFPS = {{ fps }};
+        const canonicalFPS = {{ canonical_fps }};
+        const clipStartFrame = {{ clip_start_frame }};
+        const initialAnnotations = {{ annotations|tojson|safe }};
     </script>
     <script src="{{ url_for('static', filename='js/script.js') }}"></script>
 </body>

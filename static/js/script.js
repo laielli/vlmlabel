@@ -697,12 +697,16 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Function to map canonical frame to variant frame
     function mapCanonicalToVariant(canonicalFrame) {
-        return Math.round((canonicalFrame / canonicalFps) * fps);
+        // Using the formula from the PRD:
+        // variant_frame = round(((canon - clipStartCanon) / C_FPS) * V_FPS)
+        return Math.round(((canonicalFrame - clipStartFrame) / canonicalFps) * fps);
     }
     
     // Function to map variant frame to canonical frame
     function mapVariantToCanonical(variantFrame) {
-        return Math.round((variantFrame / fps) * canonicalFps);
+        // Using the formula from the PRD:
+        // canon = round((variant_frame / V_FPS) * C_FPS) + clipStartCanon
+        return Math.round((variantFrame / fps) * canonicalFps) + clipStartFrame;
     }
     
     // Show status message
