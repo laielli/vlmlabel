@@ -6,6 +6,8 @@ A Flask-based web application for annotating videos by selecting start and end f
 
 - Support for multiple videos with organized file storage
 - Video selection via dropdown menu
+- **NEW: Multi-FPS variant support with lossless annotation remapping**
+- **NEW: Configuration-based video and variant management**
 - Automatic video FPS detection for accurate frame timing
 - Play MP4 video and view frame thumbnails in a scrollable timeline
 - Select start and end frames for events
@@ -19,7 +21,8 @@ A Flask-based web application for annotating videos by selecting start and end f
 - Python 3.6+
 - Flask
 - OpenCV (required for FPS detection and frame extraction)
-- FFmpeg (optional, recommended for frame extraction)
+- FFmpeg (required for variant generation and frame extraction)
+- PyYAML (for configuration parsing)
 
 ## Directory Structure
 
@@ -27,17 +30,22 @@ The application organizes videos and annotations in the following structure:
 
 ```
 project-root/
+├── config.yaml          # Configuration file for videos and variants
 ├── static/
 │   └── videos/
 │       ├── video_id_1/
-│       │   ├── video.mp4
+│       │   ├── video_id_1__full_30.mp4  # Canonical 30 FPS version
+│       │   ├── video_id_1__full_10.mp4  # 10 FPS version
+│       │   ├── video_id_1__full_5.mp4   # 5 FPS version
 │       │   └── frames/
-│       │       ├── frame_0001.jpg
-│       │       └── ...
+│       │       ├── full_30/             # 30 FPS frames
+│       │       │   ├── frame_0000.jpg
+│       │       │   └── ...
+│       │       ├── full_10/             # 10 FPS frames
+│       │       └── full_5/              # 5 FPS frames
 │       ├── video_id_2/
-│       │   ├── video.mp4
-│       │   └── frames/
-│       ├── ...
+│       │   ├── video_id_2__full_30.mp4
+│       │   └── ...
 ├── data/
 │   └── annotations/
 │       ├── video_id_1/
@@ -47,7 +55,7 @@ project-root/
 │       │   └── ...
 ```
 
-Each video has its own folder with its frames and annotations organized separately.
+Each video has its own folder with variants, frames, and annotations organized separately.
 
 ## Setup
 
@@ -74,7 +82,34 @@ Each video has its own folder with its frames and annotations organized separate
    - Place MP4 video files named `video.mp4` in their respective directories
    - Extract frames for each video (see below)
 
-5. Extract frames from your videos:
+5. (NEW) Configure videos and variants:
+   
+   Create a `config.yaml` file in the project root with your video configurations:
+   ```yaml
+   # Default canonical FPS for all videos
+   default_canonical_fps: 30
+
+   # Video definitions
+   videos:
+     - id: soccer_game
+       source_video: input_videos/soccer_game.mp4
+       canonical_variant: full_30
+       fps_variants: [30, 10, 5]  # full-length, different FPS
+   ```
+
+6. (NEW) Process videos and create variants:
+   
+   Process videos according to the configuration and generate all FPS variants:
+   ```
+   python preprocess_variants.py
+   ```
+   
+   You can also process a specific video:
+   ```
+   python preprocess_variants.py --video-id soccer_game
+   ```
+
+7. Extract frames from your videos (Legacy method, use preprocess_variants.py instead):
    
    **Option 1: Using FFmpeg (recommended):**
    ```
@@ -92,7 +127,7 @@ Each video has its own folder with its frames and annotations organized separate
    
    Use `python extract_frames_multi.py --help` to see all available options.
 
-6. (Optional) To set up sample placeholder directories for testing:
+8. (Optional) To set up sample placeholder directories for testing:
    ```
    python setup_test_videos.py
    ```
@@ -117,12 +152,16 @@ Each video has its own folder with its frames and annotations organized separate
 
 1. **Select a Video**: Use the dropdown at the top of the page to choose which video to annotate.
 
-2. **Play Video**: Use the video player controls to play, pause, and navigate through the video.
+2. **Select a Variant**: Use the variant dropdown to switch between different FPS versions of the same video.
+   - All annotations automatically remap between variants to maintain precise timing.
+   - The canonical variant (typically full_30) is used to store annotation data.
 
-3. **Browse Frames**: Scroll through the frame strip below the video to see thumbnails of video frames.
+3. **Play Video**: Use the video player controls to play, pause, and navigate through the video.
+
+4. **Browse Frames**: Scroll through the frame strip below the video to see thumbnails of video frames.
    - Click a thumbnail to jump to that point in the video.
 
-4. **Create Annotations**:
+5. **Create Annotations**:
    - Navigate to the start of an event (either using the video player or by clicking a thumbnail).
    - Click "Set Start" to mark the current frame as the start.
    - Navigate to the end of the event.
@@ -130,7 +169,7 @@ Each video has its own folder with its frames and annotations organized separate
    - Enter an Event Type (required) and Notes (optional).
    - Click "Add Annotation" to save this event.
 
-5. **Manage Annotations**:
+6. **Manage Annotations**:
    - View all annotations in the table.
    - Click on a row to jump to that event in the video.
    - Use the "✕" button to delete an annotation.
@@ -152,22 +191,22 @@ Each video's annotations are stored separately in its own directory under `data/
 
 To add a new video to the annotation tool:
 
-1. Create a directory for your video under `static/videos/` with a meaningful ID:
-   ```
-   mkdir -p static/videos/your_new_video_id
-   ```
-
-2. Place your video file in this directory as `video.mp4`:
-   ```
-   cp /path/to/your/video.mp4 static/videos/your_new_video_id/
-   ```
-
-3. Extract frames for this video:
-   ```
-   python extract_frames_multi.py --video-id your_new_video_id
+1. Add an entry to the `config.yaml` file:
+   ```yaml
+   videos:
+     # Existing videos here...
+     - id: your_new_video_id
+       source_video: path/to/your/source_video.mp4
+       canonical_variant: full_30
+       fps_variants: [30, 10, 5]
    ```
 
-4. Refresh the application in your browser, and the new video will appear in the dropdown menu.
+2. Process the video and generate all variants:
+   ```
+   python preprocess_variants.py --video-id your_new_video_id
+   ```
+
+3. Refresh the application in your browser, and the new video will appear in the dropdown menu.
 
 ## Troubleshooting
 

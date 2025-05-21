@@ -19,6 +19,15 @@
                     </option>
                     {% endfor %}
                 </select>
+                
+                <label for="variantSelect">Variant:</label>
+                <select id="variantSelect" name="variant">
+                    {% for var in variants %}
+                    <option value="{{ var }}" {% if var == current_variant %}selected{% endif %}>
+                        {{ var }}
+                    </option>
+                    {% endfor %}
+                </select>
             </div>
             <div class="actions">
                 <button id="saveBtn">Save to CSV</button>
@@ -30,7 +39,7 @@
 
         <main>
             <div class="video-container">
-                <video id="videoPlayer" controls data-fps="{{ fps }}">
+                <video id="videoPlayer" controls data-fps="{{ fps }}" data-canonical-fps="{{ canonical_fps }}">
                     <source src="{{ url_for('static', filename=video_file) }}" type="video/mp4">
                     Your browser does not support the video tag.
                 </video>
@@ -95,11 +104,12 @@
         <div id="statusMessage" class="status-message"></div>
     </div>
     
-    <!-- Pass video ID to JavaScript -->
+    <!-- Pass video ID and variant info to JavaScript -->
     <script>
         var currentVideoId = "{{ current_video_id }}";
-    </script>
-    <script>
+        var currentVariant = "{{ current_variant }}";
+        var variantFPS = {{ fps }};
+        var canonicalFPS = {{ canonical_fps }};
         var initialAnnotations = {{ annotations|tojson|safe }};
     </script>
     <script src="{{ url_for('static', filename='js/script.js') }}"></script>

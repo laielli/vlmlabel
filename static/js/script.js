@@ -14,6 +14,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const csvFileInput = document.getElementById('csvFileInput');
     const statusMessage = document.getElementById('statusMessage');
     const videoSelect = document.getElementById('videoSelect');
+    const variantSelect = document.getElementById('variantSelect');
     const annotationPanelTitle = document.getElementById('annotationPanelTitle');
     const cancelEditBtn = document.getElementById('cancelEditBtn');
     const saveAsNewBtn = document.getElementById('saveAsNewBtn');
@@ -28,12 +29,14 @@ document.addEventListener('DOMContentLoaded', function() {
     let currentEditingRow = null;
     let currentFrameElement = null;
     
-    // Get current video ID and fps from the data attributes
+    // Get current video ID, variant and fps from the data attributes
     const videoId = currentVideoId || '';
-    let fps = parseInt(videoPlayer.getAttribute('data-fps')) || 5;
+    const variant = currentVariant || 'full_30';
+    let fps = parseInt(videoPlayer.getAttribute('data-fps')) || 30;
+    let canonicalFps = parseInt(videoPlayer.getAttribute('data-canonical-fps')) || 30;
     
     // Display the detected FPS
-    console.log(`Using video FPS: ${fps}`);
+    console.log(`Using video FPS: ${fps}, Canonical FPS: ${canonicalFps}`);
     
     // Add event listener for video metadata loaded to verify FPS
     videoPlayer.addEventListener('loadedmetadata', function() {
@@ -102,6 +105,16 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
+    // Handle variant selection change
+    if (variantSelect) {
+        variantSelect.addEventListener('change', function() {
+            const selectedVariant = this.value;
+            if (selectedVariant && selectedVariant !== variant) {
+                window.location.href = `/video/${videoId}?variant=${selectedVariant}`;
+            }
+        });
+    }
+    
     // Initialize with any existing annotations
     if (typeof initialAnnotations !== 'undefined' && initialAnnotations.length > 0) {
         annotations = initialAnnotations;
@@ -115,26 +128,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
         
         showStatus(`Loaded ${annotations.length} annotations`);
-    }
-    
-    // Handle video selection change
-    if (videoSelect) {
-        videoSelect.addEventListener('change', function() {
-            const selectedVideoId = this.value;
-            if (selectedVideoId && selectedVideoId !== videoId) {
-                // Check if there are unsaved annotations
-                if (annotations.length > 0) {
-                    const confirmed = confirm('You have unsaved annotations. Do you want to switch videos? Your current annotations will be lost.');
-                    if (!confirmed) {
-                        // Reset the dropdown to the current video
-                        videoSelect.value = videoId;
-                        return;
-                    }
-                }
-                // Navigate to the selected video
-                window.location.href = `/video/${selectedVideoId}`;
-            }
-        });
     }
     
     // Event handling for frame thumbnails
@@ -211,61 +204,61 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Add or update annotation
     addAnnotationBtn.addEventListener('click', function() {
-        const eventType = eventTypeInput.value.trim();
-        const notes = notesInput.value.trim();
+        if (!selectedStartFrame || !selectedEndFrame) {
+            showStatus('Please set both start and end frames', true);
+            return;
+        }
         
-        if (!eventType) {
-            showStatus('Event Type is required', true);
+        if (!eventTypeInput.value.trim()) {
+            showStatus('Please enter an event type', true);
             return;
         }
         
         if (currentEditingAnnotation) {
-            // Update existing annotation
-            currentEditingAnnotation.start = selectedStartFrame;
-            currentEditingAnnotation.end = selectedEndFrame;
-            currentEditingAnnotation.type = eventType;
-            currentEditingAnnotation.notes = notes;
+            // We're editing an existing annotation
+            currentEditingAnnotation.start = mapVariantToCanonical(selectedStartFrame);
+            currentEditingAnnotation.end = mapVariantToCanonical(selectedEndFrame);
+            currentEditingAnnotation.type = eventTypeInput.value.trim();
+            currentEditingAnnotation.notes = notesInput.value.trim();
             
-            // Remove the old row
-            if (currentEditingRow) {
-                currentEditingRow.remove();
-            }
-            
-            // Add updated row
-            addAnnotationToTable(currentEditingAnnotation);
-            
-            // Resort annotations
-            sortAnnotations();
-            refreshAnnotationsList();
-            
-            showStatus('Annotation updated');
-            
-            // Clear form but stay in edit mode
-            exitEditMode();
-        } else {
-            // Create new annotation object
-            const annotation = {
-                id: Date.now(), // Simple unique ID based on timestamp
-                start: selectedStartFrame,
-                end: selectedEndFrame,
-                type: eventType,
-                notes: notes
-            };
-            
-            // Add to annotations array
-            annotations.push(annotation);
-            
-            // Sort annotations
-            sortAnnotations();
-            
-            // Refresh the list
-            refreshAnnotationsList();
-            
-            // Clear form
+            // Clear UI components
             clearAnnotationForm();
             
-            showStatus('Annotation added');
+            // Remove existing row
+            currentEditingRow.remove();
+            
+            // Add updated annotation to table
+            addAnnotationToTable(currentEditingAnnotation);
+            
+            // Reset editing state
+            exitEditMode();
+            
+            showStatus(`Annotation updated`);
+        } else {
+            // We're adding a new annotation
+            const newAnnotation = {
+                id: Date.now().toString(),  // Simple unique ID
+                start: mapVariantToCanonical(selectedStartFrame),
+                end: mapVariantToCanonical(selectedEndFrame),
+                type: eventTypeInput.value.trim(),
+                notes: notesInput.value.trim()
+            };
+            
+            // Add to our annotations array
+            annotations.push(newAnnotation);
+            
+            // Add to the table
+            addAnnotationToTable(newAnnotation);
+            
+            // Clear UI components
+            clearAnnotationForm();
+            
+            showStatus(`Annotation added`);
         }
+        
+        // Re-sort annotations
+        sortAnnotations();
+        refreshAnnotationsList();
     });
     
     // Save as new annotation
@@ -280,10 +273,11 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             
             // Create new annotation object
+            // Convert variant frames to canonical frames for storage
             const annotation = {
-                id: Date.now(), // Simple unique ID based on timestamp
-                start: selectedStartFrame,
-                end: selectedEndFrame,
+                id: Date.now().toString(), // Simple unique ID based on timestamp
+                start: mapVariantToCanonical(selectedStartFrame),
+                end: mapVariantToCanonical(selectedEndFrame),
                 type: eventType,
                 notes: notes
             };
@@ -446,11 +440,15 @@ document.addEventListener('DOMContentLoaded', function() {
             annotationPanelTitle.textContent = 'Edit Annotation';
         }
         
-        // Fill form with annotation data
-        selectedStartFrame = annotation.start;
-        selectedEndFrame = annotation.end;
-        startFrameDisplay.textContent = annotation.start;
-        endFrameDisplay.textContent = annotation.end;
+        // Map canonical frames to variant frames for display
+        const variantStartFrame = mapCanonicalToVariant(parseInt(annotation.start));
+        const variantEndFrame = mapCanonicalToVariant(parseInt(annotation.end));
+        
+        // Fill form with annotation data (using variant frames for display)
+        selectedStartFrame = variantStartFrame;
+        selectedEndFrame = variantEndFrame;
+        startFrameDisplay.textContent = variantStartFrame;
+        endFrameDisplay.textContent = variantEndFrame;
         eventTypeInput.value = annotation.type;
         notesInput.value = annotation.notes;
         
@@ -468,8 +466,9 @@ document.addEventListener('DOMContentLoaded', function() {
         row.classList.add('editing');
         
         // Highlight the start and end frames in the timeline
-        highlightFrameInTimeline(annotation.start, 'selected-start');
-        highlightFrameInTimeline(annotation.end, 'selected-end');
+        // Use variant frames here, not canonical frames
+        highlightFrameInTimeline(variantStartFrame, 'selected-start');
+        highlightFrameInTimeline(variantEndFrame, 'selected-end');
         
         // Optionally, scroll to the annotation form
         document.getElementById('annotationPanel').scrollIntoView({ behavior: 'smooth' });
@@ -598,99 +597,112 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Add annotation to the table
     function addAnnotationToTable(annotation) {
+        // Create a new row
         const row = document.createElement('tr');
         
-        // Add annotation ID as data attribute for easy reference
-        if (annotation.id) {
-            row.dataset.annotationId = annotation.id;
-        }
+        // Map annotation frames from canonical to current variant for display
+        const variantStartFrame = mapCanonicalToVariant(parseInt(annotation.start));
+        const variantEndFrame = mapCanonicalToVariant(parseInt(annotation.end));
         
-        // Create cells for each property
-        const startCell = document.createElement('td');
-        const startFrame = annotation.start;
-        const startTime = (startFrame / fps).toFixed(2);
-        startCell.innerHTML = `${startFrame} <span class="timestamp">(${startTime}s)</span>`;
-        row.appendChild(startCell);
+        // Create cells for the row with the mapped frame values
+        const startFrameCell = document.createElement('td');
+        startFrameCell.textContent = variantStartFrame;
+        startFrameCell.dataset.canonicalFrame = annotation.start;
         
-        const endCell = document.createElement('td');
-        const endFrame = annotation.end;
-        const endTime = (endFrame / fps).toFixed(2);
-        endCell.innerHTML = `${endFrame} <span class="timestamp">(${endTime}s)</span>`;
-        row.appendChild(endCell);
+        const endFrameCell = document.createElement('td');
+        endFrameCell.textContent = variantEndFrame;
+        endFrameCell.dataset.canonicalFrame = annotation.end;
         
-        const typeCell = document.createElement('td');
-        typeCell.textContent = annotation.type;
-        row.appendChild(typeCell);
+        const eventTypeCell = document.createElement('td');
+        eventTypeCell.textContent = annotation.type;
         
         const notesCell = document.createElement('td');
         notesCell.textContent = annotation.notes;
-        row.appendChild(notesCell);
         
-        // Add delete button
-        const actionCell = document.createElement('td');
+        const actionsCell = document.createElement('td');
+        
+        // Create edit button
+        const editBtn = document.createElement('button');
+        editBtn.textContent = 'Edit';
+        editBtn.classList.add('edit-btn');
+        editBtn.addEventListener('click', function() {
+            enterEditMode(annotation, row);
+        });
+        
+        // Create delete button
         const deleteBtn = document.createElement('button');
-        deleteBtn.textContent = '✕';
+        deleteBtn.textContent = 'Delete';
         deleteBtn.classList.add('delete-btn');
-        deleteBtn.addEventListener('click', function(e) {
-            e.stopPropagation(); // Prevent row click
+        deleteBtn.addEventListener('click', function() {
+            // Remove from UI
+            row.remove();
             
-            // Remove from array
-            const index = annotations.findIndex(a => 
-                (a.id && a.id === annotation.id) || 
-                (a.start === annotation.start && 
-                a.end === annotation.end && 
-                a.type === annotation.type)
-            );
-            
+            // Remove from data
+            const index = annotations.findIndex(a => a.id === annotation.id);
             if (index !== -1) {
                 annotations.splice(index, 1);
             }
             
-            // Remove from table
-            row.remove();
-            
-            // If this was the annotation being edited, exit edit mode
-            if (currentEditingAnnotation && 
-                ((currentEditingAnnotation.id && currentEditingAnnotation.id === annotation.id) || 
-                 (currentEditingAnnotation.start === annotation.start && 
-                  currentEditingAnnotation.end === annotation.end && 
-                  currentEditingAnnotation.type === annotation.type))) {
-                exitEditMode();
-            }
-            
-            showStatus('Annotation deleted');
+            showStatus(`Annotation deleted`);
         });
         
-        actionCell.appendChild(deleteBtn);
-        row.appendChild(actionCell);
+        // Add buttons to the actions cell
+        actionsCell.appendChild(editBtn);
+        actionsCell.appendChild(deleteBtn);
         
-        // Add row to table
-        annotationsTable.appendChild(row);
+        // Add cells to the row
+        row.appendChild(startFrameCell);
+        row.appendChild(endFrameCell);
+        row.appendChild(eventTypeCell);
+        row.appendChild(notesCell);
+        row.appendChild(actionsCell);
         
-        // Add click event for editing and jumping to time
+        // Add click event to allow seeking to the frame
         row.addEventListener('click', function(e) {
-            // Don't trigger if clicking the delete button
-            if (e.target.classList.contains('delete-btn')) return;
-            
-            // Check if this is already the row being edited
-            if (currentEditingAnnotation && 
-                ((currentEditingAnnotation.id && annotation.id && currentEditingAnnotation.id === annotation.id) || 
-                 (currentEditingAnnotation.start === annotation.start && 
-                  currentEditingAnnotation.end === annotation.end && 
-                  currentEditingAnnotation.type === annotation.type))) {
-                // Just jump to the time without re-entering edit mode
-                const frameTime = annotation.start / fps;
-                videoPlayer.currentTime = frameTime;
-                return;
+            // Only proceed if the click wasn't on a button
+            if (e.target.tagName !== 'BUTTON') {
+                // Seek to the start frame time
+                const startFrame = parseInt(annotation.start);
+                const currentVariantFrame = mapCanonicalToVariant(startFrame);
+                const timeInSeconds = currentVariantFrame / fps;
+                videoPlayer.currentTime = timeInSeconds;
             }
-            
-            // Load annotation for editing
-            enterEditMode(annotation, row);
-            
-            // Find the start frame and jump to it
-            const frameTime = annotation.start / fps;
-            videoPlayer.currentTime = frameTime;
         });
+        
+        // Add a hover effect to highlight the frames in the timeline
+        row.addEventListener('mouseenter', function() {
+            // Highlight the frames in the timeline
+            const startFrame = mapCanonicalToVariant(parseInt(annotation.start));
+            const endFrame = mapCanonicalToVariant(parseInt(annotation.end));
+            
+            highlightFrameInTimeline(startFrame, 'highlighted-start');
+            highlightFrameInTimeline(endFrame, 'highlighted-end');
+            
+            row.classList.add('highlighted-row');
+        });
+        
+        row.addEventListener('mouseleave', function() {
+            // Remove all highlighted frames
+            const frames = frameStrip.querySelectorAll('img');
+            frames.forEach(frame => {
+                frame.classList.remove('highlighted-start', 'highlighted-end');
+            });
+            
+            row.classList.remove('highlighted-row');
+        });
+        
+        // Add the new row to the table
+        annotationsTable.appendChild(row);
+    }
+    
+    // Function to map canonical frame to variant frame
+    function mapCanonicalToVariant(canonicalFrame) {
+        return Math.round((canonicalFrame / canonicalFps) * fps);
+    }
+    
+    // Function to map variant frame to canonical frame
+    function mapVariantToCanonical(variantFrame) {
+        return Math.round((variantFrame / fps) * canonicalFps);
     }
     
     // Show status message

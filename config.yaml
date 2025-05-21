@@ -1,0 +1,11 @@
+# VLM Label Configuration
+
+# Default canonical FPS for all videos
+default_canonical_fps: 60
+
+# Video definitions
+videos:
+  - id: dashcam60fps
+    source_video: input_videos/dashcam60fps.mp4
+    canonical_variant: full_60
+    fps_variants: [60, 30, 10, 5]          # full-length, different FPS 

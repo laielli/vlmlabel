@@ -1,6 +1,7 @@
 import os
 import csv
 import glob
+import yaml
 from datetime import datetime
 from flask import Flask, render_template, request, jsonify, send_file, redirect, url_for
 from werkzeug.utils import secure_filename
@@ -11,7 +12,20 @@ app = Flask(__name__)
 # Configuration
 VIDEO_BASE_DIR = os.path.join(app.static_folder, "videos")
 ANNOTATION_BASE_DIR = os.path.join("data", "annotations")
-DEFAULT_FPS = 5  # Default FPS if detection fails
+CONFIG_FILE = "config.yaml"
+DEFAULT_FPS = 30  # Default FPS if detection fails
+DEFAULT_CANONICAL_FPS = 30  # Default canonical FPS
+
+# Load configuration from YAML file
+def load_config():
+    """Load configuration from YAML file"""
+    if os.path.exists(CONFIG_FILE):
+        with open(CONFIG_FILE, 'r') as file:
+            return yaml.safe_load(file)
+    return {"default_canonical_fps": DEFAULT_CANONICAL_FPS, "videos": []}
+
+# Global config
+config = load_config()
 
 # Function to detect video FPS
 def detect_video_fps(video_path):
@@ -60,22 +74,34 @@ def annotate_video(video_id):
     if not os.path.exists(video_path):
         return render_template('error.html', message=f"Video ID '{video_id}' not found. Please check the ID or add this video.")
     
-    # Check if video file exists
-    video_file = os.path.join(video_path, "video.mp4")
-    if not os.path.exists(video_file):
-        return render_template('error.html', message=f"Video file not found for '{video_id}'. Please ensure video.mp4 exists in the directory.")
+    # Get available variants and default to canonical
+    variants = get_variants_for_video(video_id)
+    variant = request.args.get('variant', get_canonical_variant(video_id))
     
-    # Detect FPS from the video file
-    fps = detect_video_fps(video_file)
+    # Check if video file exists for the selected variant
+    variant_video_file = os.path.join(video_path, f"{video_id}__{variant}.mp4")
+    if not os.path.exists(variant_video_file):
+        # Try fallback to video.mp4 for backward compatibility
+        variant_video_file = os.path.join(video_path, "video.mp4")
+        if not os.path.exists(variant_video_file):
+            return render_template('error.html', message=f"Video file not found for '{video_id}' variant '{variant}'. Please ensure video files exist.")
     
-    # Get list of frame images from frames directory
-    frames_path = os.path.join(video_path, "frames")
+    # Get variant FPS
+    variant_fps = get_variant_fps(video_id, variant)
+    
+    # Get list of frame images from frames directory for the variant
+    frames_path = os.path.join(video_path, "frames", variant)
     
     # Check if frames directory exists
     if not os.path.exists(frames_path):
-        return render_template('error.html', 
-                              message=f"Frames directory not found for '{video_id}'. Please extract frames first.",
-                              video_id=video_id)
+        # Try fallback to legacy path for backward compatibility
+        legacy_frames_path = os.path.join(video_path, "frames")
+        if os.path.exists(legacy_frames_path):
+            frames_path = legacy_frames_path
+        else:
+            return render_template('error.html', 
+                                message=f"Frames directory not found for '{video_id}' variant '{variant}'. Please extract frames first.",
+                                video_id=video_id)
     
     # Get list of frames sorted by frame number
     frames = sorted([f for f in os.listdir(frames_path) if f.endswith(('.jpg', '.jpeg', '.png'))])
@@ -83,15 +109,25 @@ def annotate_video(video_id):
     # If no frames found, return error
     if not frames:
         return render_template('error.html', 
-                              message=f"No frame images found for '{video_id}'. Please extract frames from the video first.",
+                              message=f"No frame images found for '{video_id}' variant '{variant}'. Please extract frames from the video first.",
                               video_id=video_id)
     
     # Get the latest annotations for this video
     annotations = load_latest_annotation(video_id)
     
     # Create relative paths for templates
-    video_url = f"videos/{video_id}/video.mp4"
-    frames_relative_path = f"videos/{video_id}/frames/"
+    video_url = f"videos/{video_id}/{video_id}__{variant}.mp4"
+    # Fall back to legacy path if needed
+    if not os.path.exists(os.path.join(app.static_folder, video_url)):
+        video_url = f"videos/{video_id}/video.mp4"
+    
+    frames_relative_path = f"videos/{video_id}/frames/{variant}/"
+    # Fall back to legacy path if needed
+    if not os.path.exists(os.path.join(app.static_folder, frames_relative_path.strip('/'))):
+        frames_relative_path = f"videos/{video_id}/frames/"
+    
+    # Get canonical FPS for timeline mapping
+    canonical_fps = get_canonical_fps(video_id)
     
     return render_template('index.html', 
                           video_ids=video_ids,
@@ -99,7 +135,10 @@ def annotate_video(video_id):
                           video_file=video_url, 
                           frames=frames, 
                           frames_path=frames_relative_path,
-                          fps=fps,
+                          fps=variant_fps,
+                          canonical_fps=canonical_fps,
+                          variants=variants,
+                          current_variant=variant,
                           annotations=annotations)
 
 @app.route('/save_annotations/<video_id>', methods=['POST'])
@@ -281,6 +320,74 @@ def extract_frames(video_id, fps=1):
     # This would be implemented if we want to add automatic extraction
     # But for now, we're assuming frames are extracted manually
     pass
+
+# Helper function to get variant information for a video
+def get_variants_for_video(video_id):
+    """Get available variants for a video from config"""
+    # Check in config
+    for video in config.get('videos', []):
+        if video.get('id') == video_id:
+            variants = []
+            for fps in video.get('fps_variants', []):
+                variants.append(f"full_{fps}")
+            return variants
+    
+    # Fallback: Look for variant files in the directory
+    variants = []
+    video_dir = os.path.join(VIDEO_BASE_DIR, video_id)
+    if os.path.exists(video_dir):
+        for file in os.listdir(video_dir):
+            if file.startswith(f"{video_id}__") and file.endswith(".mp4"):
+                variant = file[len(f"{video_id}__"):-4]  # Extract the variant part
+                variants.append(variant)
+    
+    # If no variants found, create a default one
+    if not variants and os.path.exists(os.path.join(video_dir, "video.mp4")):
+        variants.append("full_30")  # Default legacy variant
+    
+    return variants
+
+# Helper function to get canonical variant for a video
+def get_canonical_variant(video_id):
+    """Get canonical variant for a video from config"""
+    for video in config.get('videos', []):
+        if video.get('id') == video_id:
+            return video.get('canonical_variant', 'full_30')
+    return 'full_30'  # Default
+
+# Helper function to get canonical FPS for a video
+def get_canonical_fps(video_id):
+    """Get canonical FPS for a video from config"""
+    for video in config.get('videos', []):
+        if video.get('id') == video_id:
+            canonical_variant = video.get('canonical_variant', 'full_30')
+            if canonical_variant.startswith('full_'):
+                try:
+                    return int(canonical_variant.split('_')[1])
+                except (IndexError, ValueError):
+                    pass
+    return config.get('default_canonical_fps', DEFAULT_CANONICAL_FPS)
+
+# Helper function to get variant FPS
+def get_variant_fps(video_id, variant):
+    """Get FPS for a specific variant"""
+    if variant and '_' in variant:
+        try:
+            return int(variant.split('_')[1])
+        except (IndexError, ValueError):
+            pass
+    
+    # Fallback: detect from video file
+    variant_video_file = os.path.join(VIDEO_BASE_DIR, video_id, f"{video_id}__{variant}.mp4")
+    if os.path.exists(variant_video_file):
+        return detect_video_fps(variant_video_file)
+    
+    # Legacy fallback
+    legacy_video_file = os.path.join(VIDEO_BASE_DIR, video_id, "video.mp4")
+    if os.path.exists(legacy_video_file):
+        return detect_video_fps(legacy_video_file)
+    
+    return DEFAULT_FPS
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0') 

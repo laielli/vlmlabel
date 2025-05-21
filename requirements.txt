@@ -2,3 +2,4 @@ Flask==2.3.3
 Werkzeug==2.3.7
 numpy<2.0.0
 opencv-python==4.8.0.76
+PyYAML==6.0
