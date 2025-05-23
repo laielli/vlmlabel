@@ -213,7 +213,3 @@ To add a new video to the annotation tool:
 - If you see an error about missing frames, make sure you've extracted frames from your video for the selected video ID.
 - If the video doesn't play, ensure it's in a web-compatible format (H.264 MP4 is recommended).
 - For any other issues, check the Flask server logs for error messages.
-
-## License
-
-This project is open source and available under the MIT License. 
