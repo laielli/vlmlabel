@@ -35,6 +35,232 @@ document.addEventListener('DOMContentLoaded', function() {
     let fps = parseInt(videoPlayer.getAttribute('data-fps')) || 30;
     let canonicalFps = parseInt(videoPlayer.getAttribute('data-canonical-fps')) || 30;
     
+    // Annotation Validator Class
+    class AnnotationValidator {
+        constructor(annotations, fps) {
+            this.annotations = annotations;
+            this.fps = fps;
+            this.maxFrame = Math.floor((videoPlayer.duration || 0) * fps);
+        }
+        
+        validateAnnotation(start, end, excludeId = null) {
+            const errors = [];
+            
+            // Basic validation
+            if (start >= end) {
+                errors.push("End frame must be after start frame");
+            }
+            
+            if (end - start < 3) {  // Minimum 3 frames
+                errors.push("Annotation must be at least 3 frames long");
+            }
+            
+            // Check for overlaps
+            const overlaps = this.findOverlaps(start, end, excludeId);
+            if (overlaps.length > 0) {
+                const overlapDetails = overlaps.map(a => 
+                    `${a.type} (${a.start}-${a.end})`
+                ).join(', ');
+                errors.push(`Overlaps with: ${overlapDetails}`);
+            }
+            
+            return {
+                valid: errors.length === 0,
+                errors: errors
+            };
+        }
+        
+        findOverlaps(start, end, excludeId) {
+            return this.annotations.filter(ann => {
+                if (excludeId && ann.id === excludeId) return false;
+                
+                // Check if ranges overlap
+                return !(end <= ann.start || start >= ann.end);
+            });
+        }
+        
+        suggestNextAvailableRange(afterFrame = null) {
+            // Sort annotations by start frame
+            const sorted = [...this.annotations].sort((a, b) => a.start - b.start);
+            
+            if (sorted.length === 0) {
+                return { start: 0, end: Math.min(30, this.maxFrame) };
+            }
+            
+            // Find first gap after specified frame
+            let searchStart = afterFrame || 0;
+            
+            for (let i = 0; i < sorted.length - 1; i++) {
+                const gap_start = sorted[i].end;
+                const gap_end = sorted[i + 1].start;
+                
+                if (gap_start >= searchStart && gap_end - gap_start >= 3) {
+                    return { start: gap_start, end: gap_end };
+                }
+            }
+            
+            // Check after last annotation
+            const lastEnd = sorted[sorted.length - 1].end;
+            if (lastEnd < this.maxFrame - 3) {
+                return { start: lastEnd, end: Math.min(lastEnd + 30, this.maxFrame) };
+            }
+            
+            return null;
+        }
+        
+        findGaps(minDuration = 3) {
+            const sorted = [...this.annotations].sort((a, b) => a.start - b.start);
+            const gaps = [];
+            
+            // Check start
+            if (sorted.length === 0 || sorted[0].start > minDuration) {
+                gaps.push({
+                    start: 0,
+                    end: sorted.length > 0 ? sorted[0].start : this.maxFrame
+                });
+            }
+            
+            // Check between annotations
+            for (let i = 0; i < sorted.length - 1; i++) {
+                const gapStart = sorted[i].end;
+                const gapEnd = sorted[i + 1].start;
+                
+                if (gapEnd - gapStart >= minDuration) {
+                    gaps.push({ start: gapStart, end: gapEnd });
+                }
+            }
+            
+            // Check end
+            if (sorted.length > 0) {
+                const lastEnd = sorted[sorted.length - 1].end;
+                
+                if (this.maxFrame - lastEnd >= minDuration) {
+                    gaps.push({ start: lastEnd, end: this.maxFrame });
+                }
+            }
+            
+            return gaps;
+        }
+    }
+    
+    // Create validator instance
+    let validator = new AnnotationValidator(annotations, fps);
+    
+    // Keyboard Shortcuts Class
+    class KeyboardShortcuts {
+        constructor(videoPlayer, annotationControls) {
+            this.video = videoPlayer;
+            this.controls = annotationControls;
+            this.enabled = true;
+            this.init();
+        }
+        
+        init() {
+            document.addEventListener('keydown', (e) => {
+                if (!this.enabled || e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+                    return;
+                }
+                
+                switch(e.key) {
+                    case ' ':  // Spacebar
+                        e.preventDefault();
+                        this.video.paused ? this.video.play() : this.video.pause();
+                        break;
+                        
+                    case 'i':  // Set in point
+                        e.preventDefault();
+                        setStartBtn.click();
+                        break;
+                        
+                    case 'o':  // Set out point
+                        e.preventDefault();
+                        setEndBtn.click();
+                        break;
+                        
+                    case 'Enter':  // Add annotation
+                        if (e.ctrlKey || e.metaKey) {
+                            e.preventDefault();
+                            addAnnotationBtn.click();
+                        }
+                        break;
+                        
+                    case 'ArrowLeft':  // Frame back
+                        e.preventDefault();
+                        if (e.shiftKey) {
+                            this.video.currentTime = Math.max(0, this.video.currentTime - 10);
+                        } else {
+                            this.video.currentTime = Math.max(0, this.video.currentTime - 1/fps);
+                        }
+                        break;
+                        
+                    case 'ArrowRight':  // Frame forward
+                        e.preventDefault();
+                        if (e.shiftKey) {
+                            this.video.currentTime = Math.min(this.video.duration, this.video.currentTime + 10);
+                        } else {
+                            this.video.currentTime = Math.min(this.video.duration, this.video.currentTime + 1/fps);
+                        }
+                        break;
+                        
+                    case 'g':  // Go to gap
+                        if (e.shiftKey) {
+                            e.preventDefault();
+                            this.navigateToNextGap();
+                        }
+                        break;
+                        
+                    case 'Escape':  // Cancel edit mode
+                        e.preventDefault();
+                        if (currentEditingAnnotation) {
+                            exitEditMode();
+                        }
+                        break;
+                }
+            });
+        }
+        
+        navigateToNextGap() {
+            const gaps = validator.findGaps();
+            if (gaps.length === 0) {
+                showStatus('No gaps found');
+                return;
+            }
+            
+            const currentFrame = Math.round(this.video.currentTime * fps);
+            const currentCanonicalFrame = mapVariantToCanonical(currentFrame);
+            
+            // Find next gap after current position
+            let targetGap = gaps.find(g => g.start > currentCanonicalFrame);
+            
+            // If no gap found after current position, go to first gap
+            if (!targetGap) {
+                targetGap = gaps[0];
+            }
+            
+            if (targetGap) {
+                const targetVariantFrame = mapCanonicalToVariant(targetGap.start);
+                this.video.currentTime = targetVariantFrame / fps;
+                showStatus(`Navigated to gap: ${targetGap.start}-${targetGap.end} frames`);
+            }
+        }
+        
+        enable() {
+            this.enabled = true;
+        }
+        
+        disable() {
+            this.enabled = false;
+        }
+    }
+    
+    // Create keyboard shortcuts instance
+    const keyboardShortcuts = new KeyboardShortcuts(videoPlayer, {
+        fps: fps,
+        navigateToNextGap: function() {
+            // This will be implemented in the KeyboardShortcuts class
+        }
+    });
+    
     // Display the detected FPS
     console.log(`Using video FPS: ${fps}, Canonical FPS: ${canonicalFps}`);
     
@@ -214,12 +440,28 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
         
+        // Convert to canonical frames for validation
+        const canonicalStart = mapVariantToCanonical(selectedStartFrame);
+        const canonicalEnd = mapVariantToCanonical(selectedEndFrame);
+        
+        // Validate annotation
+        const excludeId = currentEditingAnnotation ? currentEditingAnnotation.id : null;
+        const validation = validator.validateAnnotation(canonicalStart, canonicalEnd, excludeId);
+        
+        if (!validation.valid) {
+            showValidationErrors(validation.errors);
+            return;
+        }
+        
         if (currentEditingAnnotation) {
             // We're editing an existing annotation
-            currentEditingAnnotation.start = mapVariantToCanonical(selectedStartFrame);
-            currentEditingAnnotation.end = mapVariantToCanonical(selectedEndFrame);
+            currentEditingAnnotation.start = canonicalStart;
+            currentEditingAnnotation.end = canonicalEnd;
             currentEditingAnnotation.type = eventTypeInput.value.trim();
             currentEditingAnnotation.notes = notesInput.value.trim();
+            
+            // Update validator with new annotations
+            validator = new AnnotationValidator(annotations, fps);
             
             // Clear UI components
             clearAnnotationForm();
@@ -238,14 +480,17 @@ document.addEventListener('DOMContentLoaded', function() {
             // We're adding a new annotation
             const newAnnotation = {
                 id: Date.now().toString(),  // Simple unique ID
-                start: mapVariantToCanonical(selectedStartFrame),
-                end: mapVariantToCanonical(selectedEndFrame),
+                start: canonicalStart,
+                end: canonicalEnd,
                 type: eventTypeInput.value.trim(),
                 notes: notesInput.value.trim()
             };
             
             // Add to our annotations array
             annotations.push(newAnnotation);
+            
+            // Update validator with new annotations
+            validator = new AnnotationValidator(annotations, fps);
             
             // Add to the table
             addAnnotationToTable(newAnnotation);
@@ -697,16 +942,24 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Function to map canonical frame to variant frame
     function mapCanonicalToVariant(canonicalFrame) {
-        // Using the formula from the PRD:
-        // variant_frame = round(((canon - clipStartCanon) / C_FPS) * V_FPS)
-        return Math.round(((canonicalFrame - clipStartFrame) / canonicalFps) * fps);
+        // Add bounds checking
+        const maxCanonicalFrame = Math.floor((videoPlayer.duration || 0) * canonicalFps);
+        canonicalFrame = Math.max(0, Math.min(canonicalFrame, maxCanonicalFrame));
+        
+        // Handle floating point precision
+        const result = Math.round(((canonicalFrame - clipStartFrame) / canonicalFps) * fps);
+        return Math.max(0, result);
     }
     
     // Function to map variant frame to canonical frame
     function mapVariantToCanonical(variantFrame) {
-        // Using the formula from the PRD:
-        // canon = round((variant_frame / V_FPS) * C_FPS) + clipStartCanon
-        return Math.round((variantFrame / fps) * canonicalFps) + clipStartFrame;
+        // Add bounds checking
+        const maxVariantFrame = Math.floor((videoPlayer.duration || 0) * fps);
+        variantFrame = Math.max(0, Math.min(variantFrame, maxVariantFrame));
+        
+        // Handle floating point precision
+        const result = Math.round((variantFrame / fps) * canonicalFps) + clipStartFrame;
+        return Math.max(0, result);
     }
     
     // Show status message
@@ -726,5 +979,46 @@ document.addEventListener('DOMContentLoaded', function() {
         setTimeout(() => {
             statusMessage.style.display = 'none';
         }, 3000);
+    }
+    
+    // Function to show validation errors
+    function showValidationErrors(errors) {
+        const errorContainer = document.getElementById('validationErrors') || createValidationErrorContainer();
+        errorContainer.innerHTML = '';
+        
+        errors.forEach(error => {
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'validation-error-item';
+            errorDiv.textContent = error;
+            errorContainer.appendChild(errorDiv);
+        });
+        
+        errorContainer.style.display = 'block';
+        
+        // Hide after 5 seconds
+        setTimeout(() => {
+            errorContainer.style.display = 'none';
+        }, 5000);
+    }
+    
+    // Function to create validation error container
+    function createValidationErrorContainer() {
+        const container = document.createElement('div');
+        container.id = 'validationErrors';
+        container.className = 'validation-error';
+        
+        // Insert after the annotation form
+        const annotationForm = document.querySelector('.annotation-form') || document.querySelector('#annotation-panel');
+        if (annotationForm) {
+            annotationForm.insertAdjacentElement('afterend', container);
+        } else {
+            // Fallback: insert before the annotations table
+            const table = document.querySelector('#annotationsTable');
+            if (table) {
+                table.insertAdjacentElement('beforebegin', container);
+            }
+        }
+        
+        return container;
     }
 }); 

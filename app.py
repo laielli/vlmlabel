@@ -2,6 +2,7 @@ import os
 import csv
 import glob
 import yaml
+import uuid
 from datetime import datetime
 from flask import Flask, render_template, request, jsonify, send_file, redirect, url_for
 from werkzeug.utils import secure_filename
@@ -15,6 +16,12 @@ ANNOTATION_BASE_DIR = os.path.join("data", "annotations")
 CONFIG_FILE = "config.yaml"
 DEFAULT_FPS = 30  # Default FPS if detection fails
 DEFAULT_CANONICAL_FPS = 30  # Default canonical FPS
+
+@app.before_request
+def ensure_directories():
+    """Ensure required directories exist before processing requests"""
+    os.makedirs(VIDEO_BASE_DIR, exist_ok=True)
+    os.makedirs(ANNOTATION_BASE_DIR, exist_ok=True)
 
 # Load configuration from YAML file
 def load_config():
@@ -326,41 +333,43 @@ def load_latest_annotation(video_id):
 
 # Helper function to parse an annotation file
 def parse_annotation_file(file_path):
-    """Parse a CSV annotation file into a list of annotation objects"""
+    """Parse a CSV annotation file with better error handling"""
     annotations = []
     
-    with open(file_path, 'r') as csvfile:
-        reader = csv.reader(csvfile)
+    try:
+        with open(file_path, 'r', encoding='utf-8-sig') as csvfile:  # Handle BOM
+            reader = csv.DictReader(csvfile)
+            
+            # Validate headers
+            required_fields = {'start_frame', 'end_frame', 'event_type', 'notes'}
+            if reader.fieldnames and not required_fields.issubset(set(reader.fieldnames)):
+                # Try legacy format
+                csvfile.seek(0)
+                reader = csv.reader(csvfile)
+                next(reader, None)  # Skip potential header
+                
+                for row in reader:
+                    if len(row) >= 4 and row[0].isdigit() and row[1].isdigit():
+                        annotations.append({
+                            'id': str(uuid.uuid4()),
+                            'start': int(row[0]),
+                            'end': int(row[1]),
+                            'type': row[2],
+                            'notes': row[3] if len(row) > 3 else ''
+                        })
+            else:
+                # Modern format with headers
+                for row in reader:
+                    annotations.append({
+                        'id': row.get('id', str(uuid.uuid4())),
+                        'start': int(row['start_frame']),
+                        'end': int(row['end_frame']),
+                        'type': row['event_type'],
+                        'notes': row['notes']
+                    })
+    except Exception as e:
+        print(f"Error parsing annotation file: {e}")
         
-        # Skip header row if present
-        header = next(reader, None)
-        has_id_column = header and 'id' in header
-        
-        if not header or not all(col in header for col in ['start_frame', 'end_frame', 'event_type', 'notes']):
-            # If not a proper header with expected columns, reopen and read all rows
-            csvfile.seek(0)
-            reader = csv.reader(csvfile)
-            has_id_column = False
-        
-        for row in reader:
-            if has_id_column and len(row) >= 5 and row[1].isdigit() and row[2].isdigit():
-                annotations.append({
-                    'id': row[0] if row[0] else None,
-                    'start': int(row[1]),
-                    'end': int(row[2]),
-                    'type': row[3],
-                    'notes': row[4]
-                })
-            elif len(row) >= 4 and row[0].isdigit() and row[1].isdigit():
-                # No ID column, use the old format
-                annotations.append({
-                    'id': None,  # No ID available
-                    'start': int(row[0]),
-                    'end': int(row[1]),
-                    'type': row[2],
-                    'notes': row[3]
-                })
-    
     return annotations
 
 # Helper function for ffmpeg frame extraction (unused but available for reference)
