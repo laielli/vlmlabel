@@ -31,6 +31,29 @@ header {
     margin-bottom: 20px;
     padding-bottom: 15px;
     border-bottom: 1px solid #ddd;
+    flex-wrap: wrap;
+}
+
+/* Video selector */
+.video-selector {
+    display: flex;
+    align-items: center;
+    margin-right: auto;
+    margin-left: 20px;
+}
+
+.video-selector label {
+    margin-right: 10px;
+    font-weight: bold;
+}
+
+.video-selector select {
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    background-color: white;
+    font-size: 14px;
+    min-width: 150px;
 }
 
 .actions {
@@ -74,6 +97,16 @@ button:disabled {
     display: flex;
     gap: 10px;
     margin-top: 10px;
+    align-items: center;
+}
+
+.fps-display {
+    margin-left: auto;
+    background-color: #f8f9fa;
+    padding: 5px 10px;
+    border-radius: 4px;
+    font-size: 14px;
+    color: #666;
 }
 
 /* Frame strip */
@@ -106,6 +139,22 @@ button:disabled {
 
 .frame-strip img.selected-end {
     border-color: #e74c3c;
+}
+
+.frame-strip img.current-frame {
+    border-color: #3498db;
+    box-shadow: 0 0 8px rgba(52, 152, 219, 0.8);
+}
+
+/* When a frame is both current and selected, prioritize the selection border */
+.frame-strip img.current-frame.selected-start {
+    border-color: #2ecc71;
+    box-shadow: 0 0 8px rgba(46, 204, 113, 0.8);
+}
+
+.frame-strip img.current-frame.selected-end {
+    border-color: #e74c3c;
+    box-shadow: 0 0 8px rgba(231, 76, 60, 0.8);
 }
 
 /* Annotation section */
@@ -148,6 +197,35 @@ button:disabled {
     font-size: 14px;
 }
 
+/* Button group for annotation actions */
+.button-group {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+#addAnnotationBtn {
+    background-color: #3498db;
+}
+
+#saveAsNewBtn {
+    background-color: #2ecc71;
+}
+
+#cancelEditBtn {
+    background-color: #95a5a6;
+}
+
+/* Highlight for the annotation being edited */
+tr.editing {
+    background-color: #fffde7;
+    box-shadow: 0 0 5px rgba(0, 0, 0, 0.1);
+}
+
+tr.editing td {
+    font-weight: 500;
+}
+
 /* Annotations list */
 .annotations-list {
     flex: 2;
@@ -171,6 +249,12 @@ table th, table td {
 table th {
     background-color: #f8f9fa;
     font-weight: bold;
+}
+
+.timestamp {
+    color: #666;
+    font-size: 0.9em;
+    margin-left: 4px;
 }
 
 .delete-btn {
@@ -210,8 +294,19 @@ table th {
         align-items: flex-start;
     }
     
+    .video-selector {
+        margin: 10px 0;
+        width: 100%;
+    }
+    
+    .video-selector select {
+        width: 100%;
+    }
+    
     .actions {
         margin-top: 10px;
+        width: 100%;
+        justify-content: space-between;
     }
     
     .annotation-section {

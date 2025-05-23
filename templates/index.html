@@ -10,29 +10,53 @@
     <div class="container">
         <header>
             <h1>Video Annotation Tool</h1>
+            <div class="video-selector">
+                <label for="videoSelect">Video:</label>
+                <select id="videoSelect" name="video_id">
+                    {% for vid in video_ids %}
+                    <option value="{{ vid }}" {% if vid == current_video_id %}selected{% endif %}>
+                        {{ vid }}
+                    </option>
+                    {% endfor %}
+                </select>
+                
+                <label for="variantSelect">Variant:</label>
+                <select id="variantSelect" name="variant">
+                    {% for group_name, group_variants in variant_groups.items() %}
+                    <optgroup label="{{ group_name }}">
+                        {% for variant in group_variants %}
+                        <option value="{{ variant.key }}" {% if variant.key == current_variant %}selected{% endif %}>
+                            {{ variant.label }}
+                        </option>
+                        {% endfor %}
+                    </optgroup>
+                    {% endfor %}
+                </select>
+            </div>
             <div class="actions">
                 <button id="saveBtn">Save to CSV</button>
                 <label for="csvFileInput" class="button">Load CSV</label>
                 <input type="file" id="csvFileInput" accept=".csv" style="display: none;">
-                <a href="{{ url_for('download_csv') }}" id="downloadBtn" class="button" target="_blank">Download CSV</a>
+                <a href="{{ url_for('download_annotations', video_id=current_video_id) }}" id="downloadBtn" class="button" target="_blank">Download CSV</a>
             </div>
         </header>
 
         <main>
             <div class="video-container">
-                <video id="videoPlayer" controls data-fps="{{ fps }}">
+                <video id="videoPlayer" controls data-fps="{{ fps }}" data-canonical-fps="{{ canonical_fps }}">
                     <source src="{{ url_for('static', filename=video_file) }}" type="video/mp4">
                     Your browser does not support the video tag.
                 </video>
                 <div class="video-controls">
                     <button id="setStartBtn">Set Start</button>
                     <button id="setEndBtn">Set End</button>
+                    <div class="fps-display">FPS: <span id="fpsDisplay">{{ fps }}</span></div>
                 </div>
             </div>
 
             <div id="frameStrip" class="frame-strip">
                 {% for frame in frames %}
-                <img src="{{ url_for('static', filename='frames/' + frame) }}" 
+                <img src="{{ url_for('static', filename=frames_path + frame) }}" 
                      alt="Frame {{ loop.index0 }}" 
                      data-frame="{{ loop.index0 }}" 
                      data-time="{{ (loop.index0 / fps) | round(2) }}">
@@ -41,7 +65,7 @@
 
             <div class="annotation-section">
                 <div id="annotationPanel" class="annotation-panel">
-                    <h2>Create Annotation</h2>
+                    <h2 id="annotationPanelTitle">Create Annotation</h2>
                     <div class="frame-display">
                         <div>Start Frame: <span id="startFrameDisplay">---</span></div>
                         <div>End Frame: <span id="endFrameDisplay">---</span></div>
@@ -54,7 +78,11 @@
                         <label for="notesInput">Notes:</label>
                         <textarea id="notesInput" rows="3" placeholder="Enter notes about this event"></textarea>
                     </div>
-                    <button id="addAnnotationBtn" disabled>Add Annotation</button>
+                    <div class="button-group">
+                        <button id="addAnnotationBtn" disabled>Add Annotation</button>
+                        <button id="saveAsNewBtn" style="display: none;">Save as New</button>
+                        <button id="cancelEditBtn" style="display: none;">Cancel</button>
+                    </div>
                 </div>
 
                 <div class="annotations-list">
@@ -80,6 +108,15 @@
         <div id="statusMessage" class="status-message"></div>
     </div>
     
+    <!-- Pass video ID and variant info to JavaScript -->
+    <script>
+        const currentVideoId = "{{ current_video_id }}";
+        const currentVariant = "{{ current_variant }}";
+        const variantFPS = {{ fps }};
+        const canonicalFPS = {{ canonical_fps }};
+        const clipStartFrame = {{ clip_start_frame }};
+        const initialAnnotations = {{ annotations|tojson|safe }};
+    </script>
     <script src="{{ url_for('static', filename='js/script.js') }}"></script>
 </body>
 </html> 

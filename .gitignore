@@ -46,4 +46,20 @@ Thumbs.db
 .idea/
 .vscode/
 *.swp
-*.swo 
+*.swo
+
+# Video files
+*.mp4
+*.avi
+*.mov
+*.mp3
+*.wav
+*.m4a
+
+# Image files
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.bmp
+*.tiff

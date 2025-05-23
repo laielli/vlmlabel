@@ -34,6 +34,18 @@
             border-radius: 3px;
             font-family: monospace;
         }
+        .btn {
+            display: inline-block;
+            background-color: #3498db;
+            color: white;
+            padding: 8px 15px;
+            border-radius: 4px;
+            text-decoration: none;
+            margin-top: 15px;
+        }
+        .btn:hover {
+            background-color: #2980b9;
+        }
     </style>
 </head>
 <body>
@@ -44,23 +56,44 @@
     </div>
     
     <div class="action-section">
+        {% if video_id is defined %}
+        <h2>How to Extract Video Frames for "{{ video_id }}"</h2>
+        <p>To use this tool with the video "{{ video_id }}", you need to extract frames from your video first. Here's how to do it:</p>
+        
+        <h3>Option 1: Using FFmpeg (Recommended)</h3>
+        <p>If you have FFmpeg installed:</p>
+        <ol>
+            <li>Ensure your video is at <code>static/videos/{{ video_id }}/video.mp4</code></li>
+            <li>Run the following command in your terminal:</li>
+            <pre><code>mkdir -p static/videos/{{ video_id }}/frames
+ffmpeg -i static/videos/{{ video_id }}/video.mp4 -r 1 static/videos/{{ video_id }}/frames/frame_%04d.jpg</code></pre>
+            <li>This will extract 1 frame per second. If you want a different rate, change the <code>-r 1</code> parameter.</li>
+        </ol>
+        
+        <h3>Option 2: Use another extraction tool</h3>
+        <p>Extract frames from your video and place them in the <code>static/videos/{{ video_id }}/frames/</code> directory.</p>
+        
+        <p><a href="{{ url_for('annotate_video', video_id=video_id) }}" class="btn">Refresh</a></p>
+        {% else %}
         <h2>How to Extract Video Frames</h2>
         <p>To use this tool, you need to extract frames from your video first. Here's how to do it:</p>
         
         <h3>Option 1: Using FFmpeg (Recommended)</h3>
         <p>If you have FFmpeg installed:</p>
         <ol>
-            <li>Place your video at <code>static/video.mp4</code></li>
+            <li>Create a directory for your video: <code>static/videos/your_video_id</code></li>
+            <li>Place your video at <code>static/videos/your_video_id/video.mp4</code></li>
             <li>Run the following command in your terminal:</li>
-            <pre><code>mkdir -p static/frames
-ffmpeg -i static/video.mp4 -r 1 static/frames/frame_%04d.jpg</code></pre>
+            <pre><code>mkdir -p static/videos/your_video_id/frames
+ffmpeg -i static/videos/your_video_id/video.mp4 -r 1 static/videos/your_video_id/frames/frame_%04d.jpg</code></pre>
             <li>This will extract 1 frame per second. If you want a different rate, change the <code>-r 1</code> parameter.</li>
         </ol>
         
         <h3>Option 2: Use another extraction tool</h3>
-        <p>Extract frames from your video and place them in the <code>static/frames/</code> directory.</p>
+        <p>Extract frames from your video and place them in the <code>static/videos/your_video_id/frames/</code> directory.</p>
         
-        <p><a href="/">Refresh the page</a> after extracting frames.</p>
+        <p><a href="/" class="btn">Return to Home</a></p>
+        {% endif %}
     </div>
 </body>
 </html> 

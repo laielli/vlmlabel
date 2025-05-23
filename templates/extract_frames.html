@@ -53,10 +53,31 @@
         .btn:hover {
             background-color: #1a252f;
         }
+        .breadcrumb {
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+        .breadcrumb a {
+            color: #3498db;
+            text-decoration: none;
+        }
+        .breadcrumb a:hover {
+            text-decoration: underline;
+        }
     </style>
 </head>
 <body>
+    {% if video_id is defined %}
+    <div class="breadcrumb">
+        <a href="/">Home</a> &raquo; <a href="{{ url_for('annotate_video', video_id=video_id) }}">{{ video_id }}</a> &raquo; Extract Frames
+    </div>
+    <h1>Extract Frames for "{{ video_id }}"</h1>
+    {% else %}
+    <div class="breadcrumb">
+        <a href="/">Home</a> &raquo; Extract Frames
+    </div>
     <h1>Extract Frames from Video</h1>
+    {% endif %}
     
     <p>Before using the Video Annotation Tool, you need to extract frames from your video. 
        This page provides instructions on how to do that.</p>
@@ -73,13 +94,23 @@
                     <li>On Windows: Download from <a href="https://ffmpeg.org/download.html" target="_blank">ffmpeg.org</a></li>
                 </ul>
             </li>
-            <li>Place your video file at <code>static/video.mp4</code></li>
+            {% if video_id is defined %}
+            <li>Ensure your video file is at <code>static/videos/{{ video_id }}/video.mp4</code></li>
             <li>Open a terminal/command prompt and navigate to your project directory</li>
             <li>Run the following command:</li>
         </ol>
         
-        <pre><code>mkdir -p static/frames
-ffmpeg -i static/video.mp4 -r 1 static/frames/frame_%04d.jpg</code></pre>
+        <pre><code>mkdir -p static/videos/{{ video_id }}/frames
+ffmpeg -i static/videos/{{ video_id }}/video.mp4 -r 1 static/videos/{{ video_id }}/frames/frame_%04d.jpg</code></pre>
+            {% else %}
+            <li>Place your video file at <code>static/videos/your_video_id/video.mp4</code> (replace "your_video_id" with a descriptive ID)</li>
+            <li>Open a terminal/command prompt and navigate to your project directory</li>
+            <li>Run the following command:</li>
+        </ol>
+        
+        <pre><code>mkdir -p static/videos/your_video_id/frames
+ffmpeg -i static/videos/your_video_id/video.mp4 -r 1 static/videos/your_video_id/frames/frame_%04d.jpg</code></pre>
+            {% endif %}
         
         <p>This command will extract 1 frame per second from your video.</p>
         
@@ -102,14 +133,15 @@ ffmpeg -i static/video.mp4 -r 1 static/frames/frame_%04d.jpg</code></pre>
             <li>Create a Python script (e.g., <code>extract_frames.py</code>) with the following content:</li>
         </ol>
         
+        {% if video_id is defined %}
         <pre><code>import os
 import cv2
 
 # Create output directory if it doesn't exist
-os.makedirs('static/frames', exist_ok=True)
+os.makedirs('static/videos/{{ video_id }}/frames', exist_ok=True)
 
 # Open the video
-vidcap = cv2.VideoCapture('static/video.mp4')
+vidcap = cv2.VideoCapture('static/videos/{{ video_id }}/video.mp4')
 fps = vidcap.get(cv2.CAP_PROP_FPS)
 print(f"Video FPS: {fps}")
 
@@ -127,21 +159,64 @@ while success:
         break
         
     if frame_count % frame_interval == 0:
-        cv2.imwrite(f"static/frames/frame_{saved_count:04d}.jpg", image)
+        cv2.imwrite(f"static/videos/{{ video_id }}/frames/frame_{saved_count:04d}.jpg", image)
         saved_count += 1
         
     frame_count += 1
 
 print(f"Extracted {saved_count} frames from {frame_count} total frames")</code></pre>
+        {% else %}
+        <pre><code>import os
+import cv2
+
+# Replace "your_video_id" with your actual video ID
+video_id = "your_video_id"
+
+# Create output directory if it doesn't exist
+os.makedirs(f'static/videos/{video_id}/frames', exist_ok=True)
+
+# Open the video
+vidcap = cv2.VideoCapture(f'static/videos/{video_id}/video.mp4')
+fps = vidcap.get(cv2.CAP_PROP_FPS)
+print(f"Video FPS: {fps}")
+
+success = True
+frame_count = 0
+saved_count = 0
+
+# Extract frames (saving 1 frame per second)
+target_fps = 1  # Change this to extract more or fewer frames
+frame_interval = int(fps / target_fps)
+
+while success:
+    success, image = vidcap.read()
+    if not success:
+        break
+        
+    if frame_count % frame_interval == 0:
+        cv2.imwrite(f"static/videos/{video_id}/frames/frame_{saved_count:04d}.jpg", image)
+        saved_count += 1
+        
+    frame_count += 1
+
+print(f"Extracted {saved_count} frames from {frame_count} total frames")</code></pre>
+        {% endif %}
         
         <p>Run the script with: <code>python extract_frames.py</code></p>
     </div>
     
     <div class="note">
-        <p><strong>Important:</strong> Make sure your video file is named <code>video.mp4</code> and placed in the <code>static/</code> directory. 
-           If your video has a different name or format, adjust the commands accordingly.</p>
+        {% if video_id is defined %}
+        <p><strong>Important:</strong> Make sure your video file is named <code>video.mp4</code> and placed in the <code>static/videos/{{ video_id }}/</code> directory.</p>
+        {% else %}
+        <p><strong>Important:</strong> Make sure your video file is named <code>video.mp4</code> and placed in the proper directory.</p>
+        {% endif %}
     </div>
     
-    <a href="/" class="btn">Return to Annotation Tool</a>
+    {% if video_id is defined %}
+    <a href="{{ url_for('annotate_video', video_id=video_id) }}" class="btn">Return to Annotation Tool</a>
+    {% else %}
+    <a href="/" class="btn">Return to Home</a>
+    {% endif %}
 </body>
 </html> 
