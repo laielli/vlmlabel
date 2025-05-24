@@ -29,11 +29,24 @@ document.addEventListener('DOMContentLoaded', function() {
     let currentEditingRow = null;
     let currentFrameElement = null;
     
-    // Get current video ID, variant and fps from the data attributes
+    // Get current video ID, variant and fps from the template variables and data attributes
     const videoId = currentVideoId || '';
     const variant = currentVariant || 'full_30';
-    let fps = parseInt(videoPlayer.getAttribute('data-fps')) || 30;
-    let canonicalFps = parseInt(videoPlayer.getAttribute('data-canonical-fps')) || 30;
+    let fps = variantFPS || parseInt(videoPlayer.getAttribute('data-fps')) || 30;
+    let canonicalFps = canonicalFPS || parseInt(videoPlayer.getAttribute('data-canonical-fps')) || 30;
+    let clipStartFrameOffset = clipStartFrame || 0;
+    
+    // Debug logging for initialization
+    console.log('Video annotation tool initialized:', {
+        videoId,
+        variant,
+        fps,
+        canonicalFps,
+        clipStartFrameOffset,
+        variantFPS: typeof variantFPS !== 'undefined' ? variantFPS : 'undefined',
+        canonicalFPS: typeof canonicalFPS !== 'undefined' ? canonicalFPS : 'undefined',
+        clipStartFrame: typeof clipStartFrame !== 'undefined' ? clipStartFrame : 'undefined'
+    });
     
     // Annotation Validator Class
     class AnnotationValidator {
@@ -47,22 +60,11 @@ document.addEventListener('DOMContentLoaded', function() {
             const errors = [];
             
             // Basic validation
-            if (start >= end) {
-                errors.push("End frame must be after start frame");
+            if (start > end) {
+                errors.push("End frame must be at or after start frame");
             }
             
-            if (end - start < 3) {  // Minimum 3 frames
-                errors.push("Annotation must be at least 3 frames long");
-            }
-            
-            // Check for overlaps
-            const overlaps = this.findOverlaps(start, end, excludeId);
-            if (overlaps.length > 0) {
-                const overlapDetails = overlaps.map(a => 
-                    `${a.type} (${a.start}-${a.end})`
-                ).join(', ');
-                errors.push(`Overlaps with: ${overlapDetails}`);
-            }
+            // Overlap validation removed - annotations can now overlap
             
             return {
                 valid: errors.length === 0,
@@ -273,7 +275,40 @@ document.addEventListener('DOMContentLoaded', function() {
         if (document.getElementById('fpsDisplay')) {
             document.getElementById('fpsDisplay').textContent = fps;
         }
+        
+        // Initialize with any existing annotations after metadata is loaded
+        if (!annotationsLoaded) {
+            loadInitialAnnotations();
+            annotationsLoaded = true;
+        }
     });
+    
+    // Function to load initial annotations
+    function loadInitialAnnotations() {
+        if (typeof initialAnnotations !== 'undefined' && initialAnnotations.length > 0) {
+            annotations = initialAnnotations;
+            
+            // Sort annotations before adding to the table
+            sortAnnotations();
+            
+            // Add existing annotations to the table
+            annotations.forEach(annotation => {
+                addAnnotationToTable(annotation);
+            });
+            
+            showStatus(`Loaded ${annotations.length} annotations`);
+        }
+    }
+    
+    // Fallback: Load annotations after a short delay if video metadata doesn't load
+    let annotationsLoaded = false;
+    setTimeout(() => {
+        if (!annotationsLoaded) {
+            console.log('Loading annotations via fallback timeout');
+            loadInitialAnnotations();
+            annotationsLoaded = true;
+        }
+    }, 1000);
     
     // Add event listener for timeupdate to highlight current frame
     videoPlayer.addEventListener('timeupdate', function() {
@@ -339,21 +374,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 window.location.href = `/video/${videoId}?variant=${selectedVariant}`;
             }
         });
-    }
-    
-    // Initialize with any existing annotations
-    if (typeof initialAnnotations !== 'undefined' && initialAnnotations.length > 0) {
-        annotations = initialAnnotations;
-        
-        // Sort annotations before adding to the table
-        sortAnnotations();
-        
-        // Add existing annotations to the table
-        annotations.forEach(annotation => {
-            addAnnotationToTable(annotation);
-        });
-        
-        showStatus(`Loaded ${annotations.length} annotations`);
     }
     
     // Event handling for frame thumbnails
@@ -849,6 +869,17 @@ document.addEventListener('DOMContentLoaded', function() {
         const variantStartFrame = mapCanonicalToVariant(parseInt(annotation.start));
         const variantEndFrame = mapCanonicalToVariant(parseInt(annotation.end));
         
+        // Debug logging for frame mapping
+        console.log('Adding annotation to table:', {
+            originalStart: annotation.start,
+            originalEnd: annotation.end,
+            variantStartFrame,
+            variantEndFrame,
+            fps,
+            canonicalFps,
+            clipStartFrameOffset
+        });
+        
         // Create cells for the row with the mapped frame values
         const startFrameCell = document.createElement('td');
         startFrameCell.textContent = variantStartFrame;
@@ -942,12 +973,34 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Function to map canonical frame to variant frame
     function mapCanonicalToVariant(canonicalFrame) {
-        // Add bounds checking
-        const maxCanonicalFrame = Math.floor((videoPlayer.duration || 0) * canonicalFps);
+        // Ensure we have valid values for FPS variables
+        if (!fps || !canonicalFps) {
+            console.warn('FPS variables not properly initialized:', { fps, canonicalFps });
+            return 0;
+        }
+        
+        // Add bounds checking - use a reasonable maximum if video duration is not available
+        const videoDuration = videoPlayer.duration || 3600; // Default to 1 hour if duration unknown
+        const maxCanonicalFrame = Math.floor(videoDuration * canonicalFps);
         canonicalFrame = Math.max(0, Math.min(canonicalFrame, maxCanonicalFrame));
         
         // Handle floating point precision
-        const result = Math.round(((canonicalFrame - clipStartFrame) / canonicalFps) * fps);
+        const calculation = ((canonicalFrame - clipStartFrameOffset) / canonicalFps) * fps;
+        const result = Math.round(calculation);
+        
+        // Debug logging for troubleshooting
+        if (result === 0 && canonicalFrame > 0) {
+            console.log('Frame mapping issue:', {
+                canonicalFrame,
+                clipStartFrameOffset,
+                canonicalFps,
+                fps,
+                calculation,
+                result,
+                videoDuration: videoPlayer.duration
+            });
+        }
+        
         return Math.max(0, result);
     }
     
@@ -958,7 +1011,7 @@ document.addEventListener('DOMContentLoaded', function() {
         variantFrame = Math.max(0, Math.min(variantFrame, maxVariantFrame));
         
         // Handle floating point precision
-        const result = Math.round((variantFrame / fps) * canonicalFps) + clipStartFrame;
+        const result = Math.round((variantFrame / fps) * canonicalFps) + clipStartFrameOffset;
         return Math.max(0, result);
     }
     

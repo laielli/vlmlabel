@@ -499,4 +499,4 @@ def get_variant_fps(video_id, variant):
     return DEFAULT_FPS
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0') 
+    app.run(debug=True, host='0.0.0.0', port=5001) 
