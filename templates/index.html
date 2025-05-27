@@ -56,11 +56,40 @@
 
             <div id="frameStrip" class="frame-strip">
                 {% for frame in frames %}
-                <img src="{{ url_for('static', filename=frames_path + frame) }}" 
+                <img src="{{ url_for('static', filename=frames_path + 'thumbnails/' + frame) }}" 
                      alt="Frame {{ loop.index0 }}" 
                      data-frame="{{ loop.index0 }}" 
-                     data-time="{{ (loop.index0 / fps) | round(2) }}">
+                     data-time="{{ (loop.index0 / fps) | round(2) }}"
+                     onerror="this.src='{{ url_for('static', filename=frames_path + frame) }}'">
                 {% endfor %}
+            </div>
+
+            <div id="largeFrameStrip" class="large-frame-strip">
+                <div class="large-frame-container">
+                    <div class="large-frame-nav">
+                        <button id="prevFrameBtn" class="nav-btn" title="Previous Frame">‹</button>
+                    </div>
+                    <div class="large-frames-display">
+                        <div class="large-frame-item" id="prevFrame">
+                            <img id="prevFrameImg" src="" alt="Previous Frame" data-frame="">
+                            <div class="frame-label">Previous</div>
+                        </div>
+                        <div class="large-frame-item current" id="currentFrame">
+                            <img id="currentFrameImg" src="" alt="Current Frame" data-frame="">
+                            <div class="frame-label">Current</div>
+                        </div>
+                        <div class="large-frame-item" id="nextFrame">
+                            <img id="nextFrameImg" src="" alt="Next Frame" data-frame="">
+                            <div class="frame-label">Next</div>
+                        </div>
+                    </div>
+                    <div class="large-frame-nav">
+                        <button id="nextFrameBtn" class="nav-btn" title="Next Frame">›</button>
+                    </div>
+                </div>
+                <div class="frame-info">
+                    <span id="currentFrameInfo">Frame: --- | Time: ---</span>
+                </div>
             </div>
 
             <div class="annotation-section">

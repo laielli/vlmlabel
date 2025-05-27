@@ -63,3 +63,13 @@ Thumbs.db
 *.gif
 *.bmp
 *.tiff
+
+# JSON files
+*.json
+
+# CSV files
+*.csv
+
+# Excel files
+*.xlsx
+*.xls

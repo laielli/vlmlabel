@@ -7,6 +7,7 @@ from datetime import datetime
 from flask import Flask, render_template, request, jsonify, send_file, redirect, url_for
 from werkzeug.utils import secure_filename
 import cv2  # Import OpenCV for video FPS detection
+from iframe_video_processor import IFrameVideoProcessor  # Import I-frame processor
 
 app = Flask(__name__)
 
@@ -183,6 +184,9 @@ def annotate_video(video_id):
     # Get variant structure for grouped dropdown
     variant_groups = get_variant_groups(video_id)
     
+    # Load frame timestamps if available
+    frame_timestamps = load_frame_timestamps(video_id, variant)
+    
     return render_template('index.html', 
                           video_ids=video_ids,
                           current_video_id=video_id,
@@ -195,7 +199,8 @@ def annotate_video(video_id):
                           variant_groups=variant_groups,
                           current_variant=variant,
                           clip_start_frame=clip_start_frame,
-                          annotations=annotations)
+                          annotations=annotations,
+                          frame_timestamps=frame_timestamps)
 
 @app.route('/save_annotations/<video_id>', methods=['POST'])
 def save_annotations(video_id):
@@ -294,6 +299,125 @@ def extract_frames_route(video_id):
     """Show instructions for extracting frames for a specific video"""
     return render_template('extract_frames.html', video_id=video_id)
 
+@app.route('/api/frame_timestamps/<video_id>/<variant>')
+def get_frame_timestamps_api(video_id, variant):
+    """API endpoint to get frame timestamps for a specific video variant"""
+    try:
+        frame_timestamps = load_frame_timestamps(video_id, variant)
+        return jsonify({
+            'success': True,
+            'frame_timestamps': frame_timestamps,
+            'has_timestamps': len(frame_timestamps) > 0
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'frame_timestamps': {},
+            'has_timestamps': False
+        }), 500
+
+@app.route('/preprocess_video/<video_id>', methods=['POST'])
+def preprocess_video_route(video_id):
+    """Route to trigger I-frame preprocessing for a video"""
+    try:
+        # Find video config
+        video_config = None
+        for video in config.get('videos', []):
+            if video.get('id') == video_id:
+                video_config = video
+                break
+        
+        if not video_config:
+            return jsonify({
+                "success": False, 
+                "message": f"Video ID '{video_id}' not found in configuration"
+            }), 404
+        
+        # Check if source video exists
+        source_video = video_config.get('source_video')
+        if not source_video or not os.path.exists(source_video):
+            return jsonify({
+                "success": False,
+                "message": f"Source video not found: {source_video}"
+            }), 404
+        
+        # Create processor and process video
+        processor = IFrameVideoProcessor(config)
+        output_dir = os.path.join("static", "videos", video_id)
+        
+        results = processor.process_video_with_iframe_preprocessing(video_config, output_dir)
+        
+        if results['success']:
+            variant_count = len([v for v in results['variants'].values() if v['success']])
+            clip_count = len([c for c in results['clips'].values() if c['success']])
+            
+            return jsonify({
+                "success": True,
+                "message": f"Successfully processed {video_id}",
+                "variants_created": variant_count,
+                "clips_processed": clip_count,
+                "results": results
+            })
+        else:
+            return jsonify({
+                "success": False,
+                "message": f"Processing failed for {video_id}",
+                "results": results
+            }), 500
+            
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "message": f"Error processing {video_id}: {str(e)}"
+        }), 500
+
+@app.route('/preprocess_all', methods=['POST'])
+def preprocess_all_route():
+    """Route to trigger I-frame preprocessing for all videos in config"""
+    try:
+        processor = IFrameVideoProcessor(config)
+        results = {}
+        successful = 0
+        failed = 0
+        
+        for video_config in config.get('videos', []):
+            video_id = video_config.get('id')
+            
+            try:
+                output_dir = os.path.join("static", "videos", video_id)
+                video_results = processor.process_video_with_iframe_preprocessing(video_config, output_dir)
+                
+                if video_results['success']:
+                    successful += 1
+                else:
+                    failed += 1
+                
+                results[video_id] = video_results
+                
+            except Exception as e:
+                failed += 1
+                results[video_id] = {
+                    'success': False,
+                    'error': str(e),
+                    'variants': {},
+                    'clips': {}
+                }
+        
+        return jsonify({
+            "success": failed == 0,
+            "message": f"Processed {successful + failed} videos. {successful} successful, {failed} failed.",
+            "successful": successful,
+            "failed": failed,
+            "results": results
+        })
+        
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "message": f"Error during batch processing: {str(e)}"
+        }), 500
+
 # Helper function to get available video IDs
 def get_available_video_ids():
     """Return a list of available video IDs (directories in the videos folder)"""
@@ -371,6 +495,23 @@ def parse_annotation_file(file_path):
         print(f"Error parsing annotation file: {e}")
         
     return annotations
+
+# Helper function to load frame timestamps
+def load_frame_timestamps(video_id, variant):
+    """Load frame timestamps from JSON file if available"""
+    frames_dir = os.path.join(VIDEO_BASE_DIR, video_id, "frames", variant)
+    timestamp_file = os.path.join(frames_dir, "frame_timestamps.json")
+    
+    if os.path.exists(timestamp_file):
+        try:
+            import json
+            with open(timestamp_file, 'r') as f:
+                data = json.load(f)
+            return data.get('frame_mapping', {})
+        except Exception as e:
+            print(f"Error loading frame timestamps: {e}")
+    
+    return {}
 
 # Helper function for ffmpeg frame extraction (unused but available for reference)
 def extract_frames(video_id, fps=1):

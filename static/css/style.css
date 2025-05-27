@@ -157,6 +157,133 @@ button:disabled {
     box-shadow: 0 0 8px rgba(231, 76, 60, 0.8);
 }
 
+/* Large frame strip */
+.large-frame-strip {
+    background-color: #2c3e50;
+    padding: 20px;
+    margin-bottom: 20px;
+    border-radius: 8px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+.large-frame-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 15px;
+    margin-bottom: 15px;
+}
+
+.large-frame-nav {
+    display: flex;
+    align-items: center;
+}
+
+.nav-btn {
+    background-color: #34495e;
+    color: white;
+    border: none;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    font-size: 24px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.nav-btn:hover {
+    background-color: #3498db;
+    transform: scale(1.1);
+}
+
+.nav-btn:disabled {
+    background-color: #7f8c8d;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.large-frames-display {
+    display: flex;
+    gap: 20px;
+    align-items: center;
+}
+
+.large-frame-item {
+    text-align: center;
+    transition: all 0.3s ease;
+    opacity: 0.7;
+    transform: scale(0.9);
+}
+
+.large-frame-item.current {
+    opacity: 1;
+    transform: scale(1);
+}
+
+.large-frame-item img {
+    max-width: 400px;
+    max-height: 300px;
+    border: 3px solid transparent;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.large-frame-item:not(.current) img {
+    max-width: 300px;
+    max-height: 225px;
+}
+
+.large-frame-item img:hover {
+    border-color: rgba(255, 255, 255, 0.5);
+    transform: translateY(-5px);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+}
+
+.large-frame-item.current img {
+    border-color: #3498db;
+    box-shadow: 0 0 20px rgba(52, 152, 219, 0.6);
+}
+
+.large-frame-item.selected-start img {
+    border-color: #2ecc71;
+    box-shadow: 0 0 20px rgba(46, 204, 113, 0.6);
+}
+
+.large-frame-item.selected-end img {
+    border-color: #e74c3c;
+    box-shadow: 0 0 20px rgba(231, 76, 60, 0.6);
+}
+
+.frame-label {
+    color: white;
+    font-size: 14px;
+    font-weight: bold;
+    margin-top: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.large-frame-item.current .frame-label {
+    color: #3498db;
+}
+
+.frame-info {
+    text-align: center;
+    color: #ecf0f1;
+    font-size: 16px;
+    font-weight: bold;
+    background-color: rgba(52, 73, 94, 0.8);
+    padding: 10px 20px;
+    border-radius: 20px;
+    display: inline-block;
+    margin: 0 auto;
+}
+
 /* Annotation section */
 .annotation-section {
     display: flex;

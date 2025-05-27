@@ -2,6 +2,13 @@ document.addEventListener('DOMContentLoaded', function() {
     // DOM elements
     const videoPlayer = document.getElementById('videoPlayer');
     const frameStrip = document.getElementById('frameStrip');
+    const largeFrameStrip = document.getElementById('largeFrameStrip');
+    const prevFrameBtn = document.getElementById('prevFrameBtn');
+    const nextFrameBtn = document.getElementById('nextFrameBtn');
+    const prevFrameImg = document.getElementById('prevFrameImg');
+    const currentFrameImg = document.getElementById('currentFrameImg');
+    const nextFrameImg = document.getElementById('nextFrameImg');
+    const currentFrameInfo = document.getElementById('currentFrameInfo');
     const setStartBtn = document.getElementById('setStartBtn');
     const setEndBtn = document.getElementById('setEndBtn');
     const startFrameDisplay = document.getElementById('startFrameDisplay');
@@ -28,6 +35,9 @@ document.addEventListener('DOMContentLoaded', function() {
     let currentEditingAnnotation = null;
     let currentEditingRow = null;
     let currentFrameElement = null;
+    let frameTimestamps = {}; // Store precise frame timestamps
+    let currentLargeFrameIndex = 0; // Track current frame in large scroller
+    let totalFrames = 0; // Total number of frames
     
     // Get current video ID, variant and fps from the template variables and data attributes
     const videoId = currentVideoId || '';
@@ -147,6 +157,127 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Create validator instance
     let validator = new AnnotationValidator(annotations, fps);
+    
+    // Function to load frame timestamps
+    async function loadFrameTimestamps() {
+        try {
+            const response = await fetch(`/api/frame_timestamps/${videoId}/${variant}`);
+            const data = await response.json();
+            
+            if (data.success && data.has_timestamps) {
+                frameTimestamps = data.frame_timestamps;
+                console.log('Loaded frame timestamps:', Object.keys(frameTimestamps).length, 'frames');
+                return true;
+            } else {
+                console.log('No frame timestamps available, using calculated timestamps');
+                return false;
+            }
+        } catch (error) {
+            console.error('Error loading frame timestamps:', error);
+            return false;
+        }
+    }
+    
+    // Function to get precise timestamp for a frame
+    function getFrameTimestamp(frameIndex) {
+        const frameFilename = `frame_${frameIndex.toString().padStart(4, '0')}.jpg`;
+        
+        if (frameTimestamps[frameFilename]) {
+            return frameTimestamps[frameFilename].timestamp;
+        }
+        
+        // Fallback to calculated timestamp
+        return frameIndex / fps;
+    }
+
+    // Large Frame Scroller Functions
+    function updateLargeFrameScroller(frameIndex) {
+        currentLargeFrameIndex = frameIndex;
+        
+        // Get frame paths
+        const basePath = `/static/videos/${videoId}/frames/${variant}/large_thumbnails/`;
+        const fallbackPath = `/static/videos/${videoId}/frames/${variant}/`;
+        
+        // Update previous frame
+        const prevIndex = Math.max(0, frameIndex - 1);
+        const prevFrameFile = `frame_${prevIndex.toString().padStart(4, '0')}.jpg`;
+        prevFrameImg.src = basePath + prevFrameFile;
+        prevFrameImg.onerror = () => { prevFrameImg.src = fallbackPath + prevFrameFile; };
+        prevFrameImg.dataset.frame = prevIndex;
+        
+        // Update current frame
+        const currentFrameFile = `frame_${frameIndex.toString().padStart(4, '0')}.jpg`;
+        currentFrameImg.src = basePath + currentFrameFile;
+        currentFrameImg.onerror = () => { currentFrameImg.src = fallbackPath + currentFrameFile; };
+        currentFrameImg.dataset.frame = frameIndex;
+        
+        // Update next frame
+        const nextIndex = Math.min(totalFrames - 1, frameIndex + 1);
+        const nextFrameFile = `frame_${nextIndex.toString().padStart(4, '0')}.jpg`;
+        nextFrameImg.src = basePath + nextFrameFile;
+        nextFrameImg.onerror = () => { nextFrameImg.src = fallbackPath + nextFrameFile; };
+        nextFrameImg.dataset.frame = nextIndex;
+        
+        // Update frame info
+        const timestamp = getFrameTimestamp(frameIndex);
+        currentFrameInfo.textContent = `Frame: ${frameIndex} | Time: ${timestamp.toFixed(3)}s`;
+        
+        // Update navigation button states
+        prevFrameBtn.disabled = frameIndex <= 0;
+        nextFrameBtn.disabled = frameIndex >= totalFrames - 1;
+        
+        // Update selection states
+        updateLargeFrameSelectionStates();
+    }
+
+    function updateLargeFrameSelectionStates() {
+        // Clear all selection states
+        document.getElementById('prevFrame').className = 'large-frame-item';
+        document.getElementById('currentFrame').className = 'large-frame-item current';
+        document.getElementById('nextFrame').className = 'large-frame-item';
+        
+        // Apply selection states based on current selections
+        const prevIndex = Math.max(0, currentLargeFrameIndex - 1);
+        const nextIndex = Math.min(totalFrames - 1, currentLargeFrameIndex + 1);
+        
+        if (selectedStartFrame === prevIndex) {
+            document.getElementById('prevFrame').classList.add('selected-start');
+        }
+        if (selectedEndFrame === prevIndex) {
+            document.getElementById('prevFrame').classList.add('selected-end');
+        }
+        
+        if (selectedStartFrame === currentLargeFrameIndex) {
+            document.getElementById('currentFrame').classList.add('selected-start');
+        }
+        if (selectedEndFrame === currentLargeFrameIndex) {
+            document.getElementById('currentFrame').classList.add('selected-end');
+        }
+        
+        if (selectedStartFrame === nextIndex) {
+            document.getElementById('nextFrame').classList.add('selected-start');
+        }
+        if (selectedEndFrame === nextIndex) {
+            document.getElementById('nextFrame').classList.add('selected-end');
+        }
+    }
+
+    function navigateToFrame(frameIndex) {
+        if (frameIndex < 0 || frameIndex >= totalFrames) return;
+        
+        // Update large frame scroller
+        updateLargeFrameScroller(frameIndex);
+        
+        // Seek video to frame
+        const timestamp = getFrameTimestamp(frameIndex);
+        videoPlayer.pause();
+        videoPlayer.currentTime = timestamp;
+        
+        // Update small frame strip highlighting
+        highlightCurrentFrame(timestamp);
+        
+        console.log(`Navigated to frame ${frameIndex} at timestamp ${timestamp.toFixed(6)}s`);
+    }
     
     // Keyboard Shortcuts Class
     class KeyboardShortcuts {
@@ -281,6 +412,9 @@ document.addEventListener('DOMContentLoaded', function() {
             loadInitialAnnotations();
             annotationsLoaded = true;
         }
+        
+        // Load frame timestamps for precise seeking
+        loadFrameTimestamps();
     });
     
     // Function to load initial annotations
@@ -308,6 +442,9 @@ document.addEventListener('DOMContentLoaded', function() {
             loadInitialAnnotations();
             annotationsLoaded = true;
         }
+        
+        // Also load frame timestamps as fallback
+        loadFrameTimestamps();
     }, 1000);
     
     // Add event listener for timeupdate to highlight current frame
@@ -327,14 +464,16 @@ document.addEventListener('DOMContentLoaded', function() {
         const frames = frameStrip.querySelectorAll('img');
         let closestFrame = null;
         let closestDiff = Infinity;
+        let closestFrameIndex = 0;
         
-        frames.forEach(img => {
+        frames.forEach((img, index) => {
             const time = parseFloat(img.dataset.time);
             const diff = Math.abs(time - currentTime);
             
             if (diff < closestDiff) {
                 closestDiff = diff;
                 closestFrame = img;
+                closestFrameIndex = index;
             }
         });
         
@@ -342,6 +481,9 @@ document.addEventListener('DOMContentLoaded', function() {
         if (closestFrame) {
             closestFrame.classList.add('current-frame');
             currentFrameElement = closestFrame;
+            
+            // Update large frame scroller to match current frame
+            updateLargeFrameScroller(closestFrameIndex);
             
             // Check if the frame is near the edge of the visible area
             const frameRect = closestFrame.getBoundingClientRect();
@@ -379,19 +521,40 @@ document.addEventListener('DOMContentLoaded', function() {
     // Event handling for frame thumbnails
     frameStrip.querySelectorAll('img').forEach(img => {
         img.addEventListener('click', function() {
-            const time = parseFloat(this.dataset.time);
+            const frameIndex = parseInt(this.dataset.frame);
+            
+            // Get precise timestamp for this frame
+            const time = getFrameTimestamp(frameIndex);
+            
             // Ensure the time is valid and set it
             if (!isNaN(time) && time >= 0) {
                 // Force the video to seek to the exact time
                 videoPlayer.pause();
                 videoPlayer.currentTime = time;
-                // Optional: Play the video after a small delay to ensure the seek completes
-                // setTimeout(() => {
-                //     videoPlayer.play().catch(e => {
-                //         // Handle any autoplay restrictions
-                //         console.log("Could not automatically play after seeking:", e);
-                //     });
-                // }, 50);
+                
+                // Update large frame scroller
+                updateLargeFrameScroller(frameIndex);
+                
+                console.log(`Seeking to frame ${frameIndex} at precise timestamp ${time.toFixed(6)}s`);
+            }
+        });
+    });
+
+    // Event handling for large frame scroller navigation
+    prevFrameBtn.addEventListener('click', function() {
+        navigateToFrame(currentLargeFrameIndex - 1);
+    });
+
+    nextFrameBtn.addEventListener('click', function() {
+        navigateToFrame(currentLargeFrameIndex + 1);
+    });
+
+    // Event handling for large frame clicks
+    [prevFrameImg, currentFrameImg, nextFrameImg].forEach(img => {
+        img.addEventListener('click', function() {
+            const frameIndex = parseInt(this.dataset.frame);
+            if (!isNaN(frameIndex)) {
+                navigateToFrame(frameIndex);
             }
         });
     });
@@ -418,6 +581,9 @@ document.addEventListener('DOMContentLoaded', function() {
         selectedStartFrame = frameNumber;
         startFrameDisplay.textContent = frameNumber;
         
+        // Update large frame scroller selection states
+        updateLargeFrameSelectionStates();
+        
         // Check if we can enable the Add button
         checkEnableAddButton();
     });
@@ -443,6 +609,9 @@ document.addEventListener('DOMContentLoaded', function() {
         // Update state
         selectedEndFrame = frameNumber;
         endFrameDisplay.textContent = frameNumber;
+        
+        // Update large frame scroller selection states
+        updateLargeFrameSelectionStates();
         
         // Check if we can enable the Add button
         checkEnableAddButton();
@@ -1073,5 +1242,14 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         
         return container;
+    }
+    
+    // Initialize the application
+    // Initialize total frames count
+    totalFrames = frameStrip.querySelectorAll('img').length;
+    
+    // Initialize large frame scroller
+    if (totalFrames > 0) {
+        updateLargeFrameScroller(0);
     }
 }); 
