@@ -26,6 +26,18 @@ document.addEventListener('DOMContentLoaded', function() {
     const cancelEditBtn = document.getElementById('cancelEditBtn');
     const saveAsNewBtn = document.getElementById('saveAsNewBtn');
     
+    // Minimize/Maximize elements
+    const videoMinimizeBtn = document.getElementById('videoMinimizeBtn');
+    const frameStripMinimizeBtn = document.getElementById('frameStripMinimizeBtn');
+    const largeFrameStripMinimizeBtn = document.getElementById('largeFrameStripMinimizeBtn');
+    const videoContent = document.getElementById('videoContent');
+    const frameStripContent = document.getElementById('frameStripContent');
+    const largeFrameStripContent = document.getElementById('largeFrameStripContent');
+    const videoMinimizedControls = document.getElementById('videoMinimizedControls');
+    const frameStripMinimized = document.getElementById('frameStripMinimized');
+    const largeFrameStripMinimized = document.getElementById('largeFrameStripMinimized');
+    const playPauseBtn = document.getElementById('playPauseBtn');
+    
     // State variables
     let annotations = [];
     let selectedStartFrame = null;
@@ -1252,4 +1264,78 @@ document.addEventListener('DOMContentLoaded', function() {
     if (totalFrames > 0) {
         updateLargeFrameScroller(0);
     }
+
+    // Minimize/Maximize Functionality
+    function toggleSection(minimizeBtn, content, minimizedElement, sectionName) {
+        const isMinimized = content.style.display === 'none';
+        
+        if (isMinimized) {
+            // Maximize
+            content.style.display = 'block';
+            if (minimizedElement) {
+                minimizedElement.style.display = 'none';
+            }
+            minimizeBtn.textContent = '−';
+            minimizeBtn.title = `Minimize ${sectionName}`;
+            minimizeBtn.classList.remove('minimized');
+            minimizeBtn.classList.add('maximized');
+        } else {
+            // Minimize
+            content.style.display = 'none';
+            if (minimizedElement) {
+                minimizedElement.style.display = 'flex';
+            }
+            minimizeBtn.textContent = '+';
+            minimizeBtn.title = `Maximize ${sectionName}`;
+            minimizeBtn.classList.remove('maximized');
+            minimizeBtn.classList.add('minimized');
+        }
+    }
+    
+    function updatePlayPauseButton() {
+        if (videoPlayer.paused) {
+            playPauseBtn.textContent = '▶';
+            playPauseBtn.classList.remove('playing');
+            playPauseBtn.title = 'Play';
+        } else {
+            playPauseBtn.textContent = '⏸';
+            playPauseBtn.classList.add('playing');
+            playPauseBtn.title = 'Pause';
+        }
+    }
+    
+    // Event listeners for minimize/maximize functionality
+    if (videoMinimizeBtn) {
+        videoMinimizeBtn.addEventListener('click', function() {
+            toggleSection(videoMinimizeBtn, videoContent, videoMinimizedControls, 'Video Player');
+        });
+    }
+    
+    if (frameStripMinimizeBtn) {
+        frameStripMinimizeBtn.addEventListener('click', function() {
+            toggleSection(frameStripMinimizeBtn, frameStripContent, frameStripMinimized, 'Frame Timeline');
+        });
+    }
+    
+    if (largeFrameStripMinimizeBtn) {
+        largeFrameStripMinimizeBtn.addEventListener('click', function() {
+            toggleSection(largeFrameStripMinimizeBtn, largeFrameStripContent, largeFrameStripMinimized, 'Detailed Frame View');
+        });
+    }
+    
+    // Play/Pause button functionality when video is minimized
+    if (playPauseBtn) {
+        playPauseBtn.addEventListener('click', function() {
+            if (videoPlayer.paused) {
+                videoPlayer.play();
+            } else {
+                videoPlayer.pause();
+            }
+        });
+    }
+    
+    // Update play/pause button when video state changes
+    videoPlayer.addEventListener('play', updatePlayPauseButton);
+    videoPlayer.addEventListener('pause', updatePlayPauseButton);
+    videoPlayer.addEventListener('loadedmetadata', updatePlayPauseButton);
 }); 
