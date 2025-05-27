@@ -3,6 +3,8 @@ import csv
 import glob
 import yaml
 import uuid
+import re
+import json
 from datetime import datetime
 from flask import Flask, render_template, request, jsonify, send_file, redirect, url_for
 from werkzeug.utils import secure_filename
@@ -33,6 +35,24 @@ def load_config():
 
 # Global config
 config = load_config()
+
+# Function to load exact frame timestamps
+def load_frame_timestamps(video_id, variant):
+    """Load exact frame timestamps from JSON file"""
+    timestamp_file = f"static/videos/{video_id}/{variant}_timestamps_fixed.json"
+    
+    if os.path.exists(timestamp_file):
+        with open(timestamp_file, 'r') as f:
+            data = json.load(f)
+        
+        # Create lookup dict: frame_number -> timestamp
+        timestamp_lookup = {}
+        for frame_info in data['frames']:
+            timestamp_lookup[frame_info['frame_number']] = frame_info['timestamp']
+        
+        return timestamp_lookup
+    
+    return None
 
 # Function to detect video FPS
 def detect_video_fps(video_path):
@@ -154,6 +174,37 @@ def annotate_video(video_id):
                               message=f"No frame images found for '{video_id}' variant '{variant}'. Please extract frames from the video first.",
                               video_id=video_id)
     
+    # Create frame data with proper time mapping
+    frame_data = []
+    frame_interval = 1.0 / variant_fps  # Time interval between frames at target FPS
+    
+    # Load exact timestamps if available
+    timestamp_lookup = load_frame_timestamps(video_id, variant)
+    
+    for i, frame_file in enumerate(frames):
+        # Extract the frame number from the filename (e.g., frame_0004.jpg -> 4)
+        frame_match = re.search(r'frame_(\d+)', frame_file)
+        if frame_match:
+            frame_number = int(frame_match.group(1))
+        else:
+            # Fallback to enumeration index if filename doesn't match pattern
+            frame_number = i
+        
+        # Use exact timestamp if available, otherwise calculate
+        if timestamp_lookup and frame_number in timestamp_lookup:
+            frame_time = timestamp_lookup[frame_number]
+        else:
+            # Calculate the actual time this frame represents based on the frame number
+            # This ensures that frame_0004.jpg corresponds to the 4th frame in the video
+            frame_time = frame_number * frame_interval
+        
+        frame_data.append({
+            'file': frame_file,
+            'index': i,  # Keep enumeration index for UI purposes
+            'frame_number': frame_number,  # Actual frame number from filename
+            'time': round(frame_time, 6)  # Use higher precision for exact timestamps
+        })
+    
     # Get the latest annotations for this video
     annotations = load_latest_annotation(video_id)
     
@@ -187,7 +238,7 @@ def annotate_video(video_id):
                           video_ids=video_ids,
                           current_video_id=video_id,
                           video_file=video_url, 
-                          frames=frames, 
+                          frames=frame_data, 
                           frames_path=frames_relative_path,
                           fps=variant_fps,
                           canonical_fps=canonical_fps,

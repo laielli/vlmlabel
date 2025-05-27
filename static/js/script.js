@@ -48,6 +48,169 @@ document.addEventListener('DOMContentLoaded', function() {
         clipStartFrame: typeof clipStartFrame !== 'undefined' ? clipStartFrame : 'undefined'
     });
     
+    // Function to analyze frame timestamp accuracy
+    function analyzeFrameTimestamps() {
+        console.log('\n=== FRAME TIMESTAMP ANALYSIS ===');
+        const frameImages = frameStrip.querySelectorAll('img');
+        const frameInterval = 1.0 / fps;
+        
+        console.log('Total frames:', frameImages.length);
+        console.log('Expected frame interval:', frameInterval);
+        console.log('Video FPS:', fps);
+        
+        // Analyze first 10 frames for detailed comparison
+        const analysisFrames = Array.from(frameImages).slice(0, 10);
+        
+        analysisFrames.forEach((img, index) => {
+            const frameNumber = parseInt(img.dataset.frame);
+            const calculatedTime = parseFloat(img.dataset.time);
+            const expectedTime = frameNumber * frameInterval;
+            const timeDifference = Math.abs(calculatedTime - expectedTime);
+            
+            console.log(`Frame ${frameNumber}:`, {
+                filename: img.alt,
+                calculatedTime: calculatedTime,
+                expectedTime: expectedTime,
+                difference: timeDifference,
+                differenceMs: timeDifference * 1000
+            });
+        });
+        
+        // Check for any systematic offset
+        const offsets = analysisFrames.map(img => {
+            const frameNumber = parseInt(img.dataset.frame);
+            const calculatedTime = parseFloat(img.dataset.time);
+            const expectedTime = frameNumber * frameInterval;
+            return calculatedTime - expectedTime;
+        });
+        
+        const avgOffset = offsets.reduce((sum, offset) => sum + offset, 0) / offsets.length;
+        const maxOffset = Math.max(...offsets.map(Math.abs));
+        
+        console.log('Average offset:', avgOffset);
+        console.log('Maximum offset:', maxOffset);
+        console.log('Offset consistency:', offsets.every(offset => Math.abs(offset - avgOffset) < 0.001) ? 'CONSISTENT' : 'INCONSISTENT');
+        console.log('=== END FRAME TIMESTAMP ANALYSIS ===\n');
+    }
+    
+    // Function to test video seeking accuracy
+    function testVideoSeekingAccuracy() {
+        if (!videoPlayer.duration) {
+            console.log('Video not loaded yet, will test seeking accuracy after metadata loads');
+            return;
+        }
+        
+        console.log('\n=== VIDEO SEEKING ACCURACY TEST ===');
+        const testTimes = [0.0, 0.033, 0.067, 0.100, 0.133]; // First 5 frame times at 30fps
+        
+        testTimes.forEach((targetTime, index) => {
+            setTimeout(() => {
+                console.log(`Testing seek to ${targetTime}s...`);
+                const beforeTime = videoPlayer.currentTime;
+                videoPlayer.currentTime = targetTime;
+                
+                setTimeout(() => {
+                    const actualTime = videoPlayer.currentTime;
+                    const difference = Math.abs(actualTime - targetTime);
+                    console.log(`Seek to ${targetTime}s: actual=${actualTime}s, diff=${difference}s`);
+                }, 50);
+            }, index * 200); // Stagger the tests
+        });
+    }
+    
+    // Function to capture video frame for visual comparison
+    function captureVideoFrame(time, label) {
+        return new Promise((resolve) => {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            
+            // Set canvas size to match video
+            canvas.width = videoPlayer.videoWidth || 640;
+            canvas.height = videoPlayer.videoHeight || 480;
+            
+            // Seek to the specified time
+            videoPlayer.currentTime = time;
+            
+            const captureFrame = () => {
+                // Draw current video frame to canvas
+                ctx.drawImage(videoPlayer, 0, 0, canvas.width, canvas.height);
+                
+                // Get image data for comparison
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const data = imageData.data;
+                
+                // Calculate a simple hash of the image data
+                let hash = 0;
+                for (let i = 0; i < data.length; i += 4) {
+                    // Sample every 4th pixel (RGBA)
+                    hash += data[i] + data[i+1] + data[i+2]; // RGB values
+                }
+                
+                console.log(`Frame capture at ${time}s (${label}): hash=${hash}, size=${canvas.width}x${canvas.height}`);
+                
+                resolve({
+                    time: time,
+                    label: label,
+                    hash: hash,
+                    canvas: canvas,
+                    actualTime: videoPlayer.currentTime
+                });
+            };
+            
+            // Wait for seek to complete
+            const seekHandler = () => {
+                videoPlayer.removeEventListener('seeked', seekHandler);
+                setTimeout(captureFrame, 50); // Small delay to ensure frame is rendered
+            };
+            
+            videoPlayer.addEventListener('seeked', seekHandler);
+            
+            // Fallback timeout
+            setTimeout(() => {
+                videoPlayer.removeEventListener('seeked', seekHandler);
+                captureFrame();
+            }, 200);
+        });
+    }
+    
+    // Function to test visual content differences
+    async function testVisualContentDifferences() {
+        if (!videoPlayer.duration || videoPlayer.readyState < 2) {
+            console.log('Video not ready for visual content testing');
+            return;
+        }
+        
+        console.log('\n=== VISUAL CONTENT DIFFERENCE TEST ===');
+        
+        try {
+            // Capture frames at different times
+            const frame3 = await captureVideoFrame(0.100, 'frame_3');
+            const frame4 = await captureVideoFrame(0.133, 'frame_4');
+            
+            // Compare the hashes
+            const hashDifference = Math.abs(frame3.hash - frame4.hash);
+            const percentDifference = (hashDifference / Math.max(frame3.hash, frame4.hash)) * 100;
+            
+            console.log('Frame 3 hash:', frame3.hash);
+            console.log('Frame 4 hash:', frame4.hash);
+            console.log('Hash difference:', hashDifference);
+            console.log('Percent difference:', percentDifference.toFixed(2) + '%');
+            
+            if (percentDifference < 1) {
+                console.warn('⚠️ VISUAL CONTENT VERY SIMILAR!');
+                console.warn('Frames 3 and 4 appear to have nearly identical visual content');
+                console.warn('This could explain why clicking different frames doesn\'t appear to change the video');
+            } else {
+                console.log('✅ Visual content differs significantly between frames');
+            }
+            
+        } catch (error) {
+            console.error('Error during visual content testing:', error);
+        }
+        
+        console.log('=== END VISUAL CONTENT TEST ===\n');
+    }
+    
     // Annotation Validator Class
     class AnnotationValidator {
         constructor(annotations, fps) {
@@ -281,6 +444,16 @@ document.addEventListener('DOMContentLoaded', function() {
             loadInitialAnnotations();
             annotationsLoaded = true;
         }
+        
+        // Run debugging analysis after video loads
+        setTimeout(() => {
+            analyzeFrameTimestamps();
+            testVideoSeekingAccuracy();
+            // Test visual content differences after other tests
+            setTimeout(() => {
+                testVisualContentDifferences();
+            }, 2000);
+        }, 500);
     });
     
     // Function to load initial annotations
@@ -308,6 +481,18 @@ document.addEventListener('DOMContentLoaded', function() {
             loadInitialAnnotations();
             annotationsLoaded = true;
         }
+        
+        // Run debugging analysis as fallback
+        setTimeout(() => {
+            analyzeFrameTimestamps();
+            if (videoPlayer.duration) {
+                testVideoSeekingAccuracy();
+                // Test visual content differences
+                setTimeout(() => {
+                    testVisualContentDifferences();
+                }, 2000);
+            }
+        }, 500);
     }, 1000);
     
     // Add event listener for timeupdate to highlight current frame
@@ -379,19 +564,84 @@ document.addEventListener('DOMContentLoaded', function() {
     // Event handling for frame thumbnails
     frameStrip.querySelectorAll('img').forEach(img => {
         img.addEventListener('click', function() {
-            const time = parseFloat(this.dataset.time);
+            const targetTime = parseFloat(this.dataset.time);
+            const frameNumber = parseInt(this.dataset.frame);
+            const frameFile = this.alt;
+            
+            console.log('=== FRAME CLICK DEBUG ===');
+            console.log('Frame clicked:', frameFile);
+            console.log('Frame number:', frameNumber);
+            console.log('Target time (calculated):', targetTime);
+            console.log('Current video time (before seek):', videoPlayer.currentTime);
+            
             // Ensure the time is valid and set it
-            if (!isNaN(time) && time >= 0) {
+            if (!isNaN(targetTime) && targetTime >= 0) {
                 // Force the video to seek to the exact time
                 videoPlayer.pause();
-                videoPlayer.currentTime = time;
-                // Optional: Play the video after a small delay to ensure the seek completes
-                // setTimeout(() => {
-                //     videoPlayer.play().catch(e => {
-                //         // Handle any autoplay restrictions
-                //         console.log("Could not automatically play after seeking:", e);
-                //     });
-                // }, 50);
+                
+                // Store the time before seeking
+                const timeBeforeSeek = videoPlayer.currentTime;
+                
+                // Seek to the target time
+                videoPlayer.currentTime = targetTime;
+                
+                // Add event listener to capture the actual time after seeking
+                const seekedHandler = function() {
+                    const actualTime = videoPlayer.currentTime;
+                    const timeDifference = Math.abs(actualTime - targetTime);
+                    
+                    console.log('Target time:', targetTime);
+                    console.log('Actual time after seek:', actualTime);
+                    console.log('Time difference:', timeDifference);
+                    console.log('Frame interval (1/fps):', 1/fps);
+                    console.log('Is difference > frame interval?', timeDifference > (1/fps));
+                    
+                    // Calculate what frame number the actual time corresponds to
+                    const actualFrameNumber = Math.round(actualTime * fps);
+                    console.log('Expected frame number:', frameNumber);
+                    console.log('Actual frame number (from video time):', actualFrameNumber);
+                    console.log('Frame number difference:', Math.abs(actualFrameNumber - frameNumber));
+                    
+                    // Check if we're showing the expected frame
+                    if (Math.abs(actualFrameNumber - frameNumber) > 0) {
+                        console.warn('⚠️ FRAME MISMATCH DETECTED!');
+                        console.warn('Clicked frame', frameNumber, 'but video is showing frame', actualFrameNumber);
+                    } else {
+                        console.log('✅ Frame alignment correct');
+                    }
+                    
+                    // Additional debugging for visual content
+                    console.log('📊 ADDITIONAL DEBUG INFO:');
+                    console.log('Video duration:', videoPlayer.duration);
+                    console.log('Video current time (precise):', videoPlayer.currentTime);
+                    console.log('Video ready state:', videoPlayer.readyState);
+                    console.log('Video paused:', videoPlayer.paused);
+                    
+                    // Check if this is a significant time jump
+                    const timeJump = Math.abs(actualTime - timeBeforeSeek);
+                    console.log('Time jump magnitude:', timeJump);
+                    console.log('Is significant jump (>0.01s)?', timeJump > 0.01);
+                    
+                    // Log frame file info
+                    console.log('Frame file clicked:', frameFile);
+                    console.log('Frame thumbnail src:', this.src);
+                    
+                    console.log('=== END FRAME CLICK DEBUG ===\n');
+                    
+                    // Remove the event listener after handling
+                    videoPlayer.removeEventListener('seeked', seekedHandler);
+                };
+                
+                // Add the seeked event listener
+                videoPlayer.addEventListener('seeked', seekedHandler);
+                
+                // Fallback timeout in case seeked event doesn't fire
+                setTimeout(() => {
+                    if (videoPlayer.currentTime !== timeBeforeSeek) {
+                        // Seek completed, trigger manual debug if seeked event didn't fire
+                        seekedHandler();
+                    }
+                }, 100);
             }
         });
     });

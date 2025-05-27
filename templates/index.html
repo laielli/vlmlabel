@@ -56,10 +56,11 @@
 
             <div id="frameStrip" class="frame-strip">
                 {% for frame in frames %}
-                <img src="{{ url_for('static', filename=frames_path + frame) }}" 
-                     alt="Frame {{ loop.index0 }}" 
-                     data-frame="{{ loop.index0 }}" 
-                     data-time="{{ (loop.index0 / fps) | round(2) }}">
+                <img src="{{ url_for('static', filename=frames_path + frame.file) }}" 
+                     alt="Frame {{ frame.frame_number }}" 
+                     data-frame="{{ frame.frame_number }}" 
+                     data-time="{{ frame.time }}"
+                     title="Frame {{ frame.frame_number }} ({{ frame.time }}s)">
                 {% endfor %}
             </div>
 
