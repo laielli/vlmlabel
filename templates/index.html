@@ -42,34 +42,39 @@
         </header>
 
         <main>
-            <div class="video-container">
-                <div class="section-header">
-                    <h3>Video Player</h3>
-                    <button class="minimize-btn" id="videoMinimizeBtn" title="Minimize Video Player">−</button>
+            <!-- Permanent Unified Controls Row -->
+            <div class="unified-controls" id="unifiedControls">
+                <div class="control-section">
+                    <button class="feature-btn" id="videoToggleBtn" title="Toggle Video Player">📹</button>
+                    <span class="section-label">Video</span>
+                    <button id="playPauseBtn" class="play-pause-btn" title="Play/Pause">▶</button>
+                    <button id="setStartBtn" class="control-btn" title="Set Start Frame">Start</button>
+                    <button id="setEndBtn" class="control-btn" title="Set End Frame">End</button>
                 </div>
-                <div class="section-content" id="videoContent">
+                <div class="control-section">
+                    <button class="feature-btn" id="frameStripToggleBtn" title="Toggle Frame Timeline">🎞️</button>
+                    <span class="section-label">Timeline ({{ frames|length }} frames)</span>
+                </div>
+                <div class="control-section">
+                    <button class="feature-btn" id="largeFrameStripToggleBtn" title="Toggle Detailed Frame View">🔍</button>
+                    <span class="section-label">Detail View</span>
+                </div>
+            </div>
+
+            <div class="video-container">
+                <div id="videoContent">
                     <video id="videoPlayer" controls data-fps="{{ fps }}" data-canonical-fps="{{ canonical_fps }}">
                         <source src="{{ url_for('static', filename=video_file) }}" type="video/mp4">
                         Your browser does not support the video tag.
                     </video>
                     <div class="video-controls">
-                        <button id="setStartBtn">Set Start</button>
-                        <button id="setEndBtn">Set End</button>
                         <div class="fps-display">FPS: <span id="fpsDisplay">{{ fps }}</span></div>
                     </div>
-                </div>
-                <div class="minimized-controls" id="videoMinimizedControls" style="display: none;">
-                    <button id="playPauseBtn" class="play-pause-btn" title="Play/Pause">▶</button>
-                    <span class="minimized-info">Video Player (Minimized)</span>
                 </div>
             </div>
 
             <div class="frame-scroller-container">
-                <div class="section-header">
-                    <h3>Frame Timeline</h3>
-                    <button class="minimize-btn" id="frameStripMinimizeBtn" title="Minimize Frame Timeline">−</button>
-                </div>
-                <div class="section-content" id="frameStripContent">
+                <div id="frameStripContent">
                     <div id="frameStrip" class="frame-strip">
                         {% for frame in frames %}
                         <img src="{{ url_for('static', filename=frames_path + 'thumbnails/' + frame) }}" 
@@ -80,17 +85,10 @@
                         {% endfor %}
                     </div>
                 </div>
-                <div class="minimized-placeholder" id="frameStripMinimized" style="display: none;">
-                    <span class="minimized-info">Frame Timeline (Minimized) - {{ frames|length }} frames</span>
-                </div>
             </div>
 
             <div class="large-frame-scroller-container">
-                <div class="section-header">
-                    <h3>Detailed Frame View</h3>
-                    <button class="minimize-btn" id="largeFrameStripMinimizeBtn" title="Minimize Detailed Frame View">−</button>
-                </div>
-                <div class="section-content" id="largeFrameStripContent">
+                <div id="largeFrameStripContent">
                     <div id="largeFrameStrip" class="large-frame-strip">
                         <div class="large-frame-container">
                             <div class="large-frame-nav">
@@ -118,9 +116,6 @@
                             <span id="currentFrameInfo">Frame: --- | Time: ---</span>
                         </div>
                     </div>
-                </div>
-                <div class="minimized-placeholder" id="largeFrameStripMinimized" style="display: none;">
-                    <span class="minimized-info">Detailed Frame View (Minimized)</span>
                 </div>
             </div>
 

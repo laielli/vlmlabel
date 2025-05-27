@@ -26,17 +26,23 @@ document.addEventListener('DOMContentLoaded', function() {
     const cancelEditBtn = document.getElementById('cancelEditBtn');
     const saveAsNewBtn = document.getElementById('saveAsNewBtn');
     
-    // Minimize/Maximize elements
-    const videoMinimizeBtn = document.getElementById('videoMinimizeBtn');
-    const frameStripMinimizeBtn = document.getElementById('frameStripMinimizeBtn');
-    const largeFrameStripMinimizeBtn = document.getElementById('largeFrameStripMinimizeBtn');
+    // Unified Controls elements
     const videoContent = document.getElementById('videoContent');
     const frameStripContent = document.getElementById('frameStripContent');
     const largeFrameStripContent = document.getElementById('largeFrameStripContent');
-    const videoMinimizedControls = document.getElementById('videoMinimizedControls');
-    const frameStripMinimized = document.getElementById('frameStripMinimized');
-    const largeFrameStripMinimized = document.getElementById('largeFrameStripMinimized');
     const playPauseBtn = document.getElementById('playPauseBtn');
+    
+    // Feature toggle buttons in unified row
+    const videoToggleBtn = document.getElementById('videoToggleBtn');
+    const frameStripToggleBtn = document.getElementById('frameStripToggleBtn');
+    const largeFrameStripToggleBtn = document.getElementById('largeFrameStripToggleBtn');
+    
+    // Track visibility state
+    let sectionVisibility = {
+        video: true,
+        frameStrip: true,
+        largeFrameStrip: true
+    };
     
     // State variables
     let annotations = [];
@@ -1264,31 +1270,21 @@ document.addEventListener('DOMContentLoaded', function() {
     if (totalFrames > 0) {
         updateLargeFrameScroller(0);
     }
-
-    // Minimize/Maximize Functionality
-    function toggleSection(minimizeBtn, content, minimizedElement, sectionName) {
-        const isMinimized = content.style.display === 'none';
+    
+    // Toggle Section Functionality
+    function toggleSection(sectionKey, content, toggleBtn) {
+        const isVisible = sectionVisibility[sectionKey];
         
-        if (isMinimized) {
-            // Maximize
-            content.style.display = 'block';
-            if (minimizedElement) {
-                minimizedElement.style.display = 'none';
-            }
-            minimizeBtn.textContent = '−';
-            minimizeBtn.title = `Minimize ${sectionName}`;
-            minimizeBtn.classList.remove('minimized');
-            minimizeBtn.classList.add('maximized');
-        } else {
-            // Minimize
+        if (isVisible) {
+            // Hide section
             content.style.display = 'none';
-            if (minimizedElement) {
-                minimizedElement.style.display = 'flex';
-            }
-            minimizeBtn.textContent = '+';
-            minimizeBtn.title = `Maximize ${sectionName}`;
-            minimizeBtn.classList.remove('maximized');
-            minimizeBtn.classList.add('minimized');
+            toggleBtn.classList.add('minimized');
+            sectionVisibility[sectionKey] = false;
+        } else {
+            // Show section
+            content.style.display = 'block';
+            toggleBtn.classList.remove('minimized');
+            sectionVisibility[sectionKey] = true;
         }
     }
     
@@ -1304,26 +1300,26 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
-    // Event listeners for minimize/maximize functionality
-    if (videoMinimizeBtn) {
-        videoMinimizeBtn.addEventListener('click', function() {
-            toggleSection(videoMinimizeBtn, videoContent, videoMinimizedControls, 'Video Player');
+    // Event listeners for feature toggle buttons
+    if (videoToggleBtn) {
+        videoToggleBtn.addEventListener('click', function() {
+            toggleSection('video', videoContent, videoToggleBtn);
         });
     }
     
-    if (frameStripMinimizeBtn) {
-        frameStripMinimizeBtn.addEventListener('click', function() {
-            toggleSection(frameStripMinimizeBtn, frameStripContent, frameStripMinimized, 'Frame Timeline');
+    if (frameStripToggleBtn) {
+        frameStripToggleBtn.addEventListener('click', function() {
+            toggleSection('frameStrip', frameStripContent, frameStripToggleBtn);
         });
     }
     
-    if (largeFrameStripMinimizeBtn) {
-        largeFrameStripMinimizeBtn.addEventListener('click', function() {
-            toggleSection(largeFrameStripMinimizeBtn, largeFrameStripContent, largeFrameStripMinimized, 'Detailed Frame View');
+    if (largeFrameStripToggleBtn) {
+        largeFrameStripToggleBtn.addEventListener('click', function() {
+            toggleSection('largeFrameStrip', largeFrameStripContent, largeFrameStripToggleBtn);
         });
     }
     
-    // Play/Pause button functionality when video is minimized
+    // Play/Pause button functionality
     if (playPauseBtn) {
         playPauseBtn.addEventListener('click', function() {
             if (videoPlayer.paused) {
