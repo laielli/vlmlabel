@@ -12,11 +12,6 @@ videos:
     clips:
       - name: clip_001              # clip key
         label: "001"
-        start: "00:00:02.0"
-        end:   "00:00:08.0"
-        fps: [30, 5]                # clip_30 and clip_5 will be generated
-      - name: clip_002              # clip key
-        label: "002"
-        start: "00:00:01.0"
-        end:   "00:00:09.0"
-        fps: [2, 1]          # full-length, different FPS 
+        start: "00:00:03.0"
+        end:   "00:00:05.0"
+        fps: [30, 5, 2]

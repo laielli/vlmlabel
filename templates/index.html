@@ -42,25 +42,81 @@
         </header>
 
         <main>
-            <div class="video-container">
-                <video id="videoPlayer" controls data-fps="{{ fps }}" data-canonical-fps="{{ canonical_fps }}">
-                    <source src="{{ url_for('static', filename=video_file) }}" type="video/mp4">
-                    Your browser does not support the video tag.
-                </video>
-                <div class="video-controls">
-                    <button id="setStartBtn">Set Start</button>
-                    <button id="setEndBtn">Set End</button>
-                    <div class="fps-display">FPS: <span id="fpsDisplay">{{ fps }}</span></div>
+            <!-- Permanent Unified Controls Row -->
+            <div class="unified-controls" id="unifiedControls">
+                <div class="control-section">
+                    <button class="feature-btn" id="videoToggleBtn" title="Toggle Video Player">📹</button>
+                    <span class="section-label">Video</span>
+                    <button id="playPauseBtn" class="play-pause-btn" title="Play/Pause">▶</button>
+                    <button id="setStartBtn" class="control-btn" title="Set Start Frame">Start</button>
+                    <button id="setEndBtn" class="control-btn" title="Set End Frame">End</button>
+                </div>
+                <div class="control-section">
+                    <button class="feature-btn" id="frameStripToggleBtn" title="Toggle Frame Timeline">🎞️</button>
+                    <span class="section-label">Timeline ({{ frames|length }} frames)</span>
+                </div>
+                <div class="control-section">
+                    <button class="feature-btn" id="largeFrameStripToggleBtn" title="Toggle Detailed Frame View">🔍</button>
+                    <span class="section-label">Detail View</span>
                 </div>
             </div>
 
-            <div id="frameStrip" class="frame-strip">
-                {% for frame in frames %}
-                <img src="{{ url_for('static', filename=frames_path + frame) }}" 
-                     alt="Frame {{ loop.index0 }}" 
-                     data-frame="{{ loop.index0 }}" 
-                     data-time="{{ (loop.index0 / fps) | round(2) }}">
-                {% endfor %}
+            <div class="video-container">
+                <div id="videoContent">
+                    <video id="videoPlayer" controls data-fps="{{ fps }}" data-canonical-fps="{{ canonical_fps }}">
+                        <source src="{{ url_for('static', filename=video_file) }}" type="video/mp4">
+                        Your browser does not support the video tag.
+                    </video>
+                    <div class="video-controls">
+                        <div class="fps-display">FPS: <span id="fpsDisplay">{{ fps }}</span></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="frame-scroller-container">
+                <div id="frameStripContent">
+                    <div id="frameStrip" class="frame-strip">
+                        {% for frame in frames %}
+                        <img src="{{ url_for('static', filename=frames_path + 'thumbnails/' + frame) }}" 
+                             alt="Frame {{ loop.index0 }}" 
+                             data-frame="{{ loop.index0 }}" 
+                             data-time="{{ (loop.index0 / fps) | round(2) }}"
+                             onerror="this.src='{{ url_for('static', filename=frames_path + frame) }}'">
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="large-frame-scroller-container">
+                <div id="largeFrameStripContent">
+                    <div id="largeFrameStrip" class="large-frame-strip">
+                        <div class="large-frame-container">
+                            <div class="large-frame-nav">
+                                <button id="prevFrameBtn" class="nav-btn" title="Previous Frame">‹</button>
+                            </div>
+                            <div class="large-frames-display">
+                                <div class="large-frame-item" id="prevFrame">
+                                    <img id="prevFrameImg" src="" alt="Previous Frame" data-frame="">
+                                    <div class="frame-label">Previous</div>
+                                </div>
+                                <div class="large-frame-item current" id="currentFrame">
+                                    <img id="currentFrameImg" src="" alt="Current Frame" data-frame="">
+                                    <div class="frame-label">Current</div>
+                                </div>
+                                <div class="large-frame-item" id="nextFrame">
+                                    <img id="nextFrameImg" src="" alt="Next Frame" data-frame="">
+                                    <div class="frame-label">Next</div>
+                                </div>
+                            </div>
+                            <div class="large-frame-nav">
+                                <button id="nextFrameBtn" class="nav-btn" title="Next Frame">›</button>
+                            </div>
+                        </div>
+                        <div class="frame-info">
+                            <span id="currentFrameInfo">Frame: --- | Time: ---</span>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <div class="annotation-section">
@@ -101,6 +157,42 @@
                             <!-- Annotation entries will be added here -->
                         </tbody>
                     </table>
+                    
+                    <div class="keyboard-shortcuts">
+                        <h3>Keyboard Shortcuts</h3>
+                        <div class="shortcuts-grid">
+                            <div class="shortcut-item">
+                                <kbd>Space</kbd> Play/Pause
+                            </div>
+                            <div class="shortcut-item">
+                                <kbd>I</kbd> Set In Point
+                            </div>
+                            <div class="shortcut-item">
+                                <kbd>O</kbd> Set Out Point
+                            </div>
+                            <div class="shortcut-item">
+                                <kbd>Ctrl+Enter</kbd> Add Annotation
+                            </div>
+                            <div class="shortcut-item">
+                                <kbd>←</kbd> Frame Back
+                            </div>
+                            <div class="shortcut-item">
+                                <kbd>→</kbd> Frame Forward
+                            </div>
+                            <div class="shortcut-item">
+                                <kbd>Shift+←</kbd> 10s Back
+                            </div>
+                            <div class="shortcut-item">
+                                <kbd>Shift+→</kbd> 10s Forward
+                            </div>
+                            <div class="shortcut-item">
+                                <kbd>Shift+G</kbd> Next Gap
+                            </div>
+                            <div class="shortcut-item">
+                                <kbd>Esc</kbd> Cancel Edit
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </main>

@@ -2,6 +2,13 @@ document.addEventListener('DOMContentLoaded', function() {
     // DOM elements
     const videoPlayer = document.getElementById('videoPlayer');
     const frameStrip = document.getElementById('frameStrip');
+    const largeFrameStrip = document.getElementById('largeFrameStrip');
+    const prevFrameBtn = document.getElementById('prevFrameBtn');
+    const nextFrameBtn = document.getElementById('nextFrameBtn');
+    const prevFrameImg = document.getElementById('prevFrameImg');
+    const currentFrameImg = document.getElementById('currentFrameImg');
+    const nextFrameImg = document.getElementById('nextFrameImg');
+    const currentFrameInfo = document.getElementById('currentFrameInfo');
     const setStartBtn = document.getElementById('setStartBtn');
     const setEndBtn = document.getElementById('setEndBtn');
     const startFrameDisplay = document.getElementById('startFrameDisplay');
@@ -19,6 +26,24 @@ document.addEventListener('DOMContentLoaded', function() {
     const cancelEditBtn = document.getElementById('cancelEditBtn');
     const saveAsNewBtn = document.getElementById('saveAsNewBtn');
     
+    // Unified Controls elements
+    const videoContent = document.getElementById('videoContent');
+    const frameStripContent = document.getElementById('frameStripContent');
+    const largeFrameStripContent = document.getElementById('largeFrameStripContent');
+    const playPauseBtn = document.getElementById('playPauseBtn');
+    
+    // Feature toggle buttons in unified row
+    const videoToggleBtn = document.getElementById('videoToggleBtn');
+    const frameStripToggleBtn = document.getElementById('frameStripToggleBtn');
+    const largeFrameStripToggleBtn = document.getElementById('largeFrameStripToggleBtn');
+    
+    // Track visibility state
+    let sectionVisibility = {
+        video: true,
+        frameStrip: true,
+        largeFrameStrip: true
+    };
+    
     // State variables
     let annotations = [];
     let selectedStartFrame = null;
@@ -28,12 +53,364 @@ document.addEventListener('DOMContentLoaded', function() {
     let currentEditingAnnotation = null;
     let currentEditingRow = null;
     let currentFrameElement = null;
+    let frameTimestamps = {}; // Store precise frame timestamps
+    let currentLargeFrameIndex = 0; // Track current frame in large scroller
+    let totalFrames = 0; // Total number of frames
     
-    // Get current video ID, variant and fps from the data attributes
+    // Get current video ID, variant and fps from the template variables and data attributes
     const videoId = currentVideoId || '';
     const variant = currentVariant || 'full_30';
-    let fps = parseInt(videoPlayer.getAttribute('data-fps')) || 30;
-    let canonicalFps = parseInt(videoPlayer.getAttribute('data-canonical-fps')) || 30;
+    let fps = variantFPS || parseInt(videoPlayer.getAttribute('data-fps')) || 30;
+    let canonicalFps = canonicalFPS || parseInt(videoPlayer.getAttribute('data-canonical-fps')) || 30;
+    let clipStartFrameOffset = clipStartFrame || 0;
+    
+    // Debug logging for initialization
+    console.log('Video annotation tool initialized:', {
+        videoId,
+        variant,
+        fps,
+        canonicalFps,
+        clipStartFrameOffset,
+        variantFPS: typeof variantFPS !== 'undefined' ? variantFPS : 'undefined',
+        canonicalFPS: typeof canonicalFPS !== 'undefined' ? canonicalFPS : 'undefined',
+        clipStartFrame: typeof clipStartFrame !== 'undefined' ? clipStartFrame : 'undefined'
+    });
+    
+    // Annotation Validator Class
+    class AnnotationValidator {
+        constructor(annotations, fps) {
+            this.annotations = annotations;
+            this.fps = fps;
+            this.maxFrame = Math.floor((videoPlayer.duration || 0) * fps);
+        }
+        
+        validateAnnotation(start, end, excludeId = null) {
+            const errors = [];
+            
+            // Basic validation
+            if (start > end) {
+                errors.push("End frame must be at or after start frame");
+            }
+            
+            // Overlap validation removed - annotations can now overlap
+            
+            return {
+                valid: errors.length === 0,
+                errors: errors
+            };
+        }
+        
+        findOverlaps(start, end, excludeId) {
+            return this.annotations.filter(ann => {
+                if (excludeId && ann.id === excludeId) return false;
+                
+                // Check if ranges overlap
+                return !(end <= ann.start || start >= ann.end);
+            });
+        }
+        
+        suggestNextAvailableRange(afterFrame = null) {
+            // Sort annotations by start frame
+            const sorted = [...this.annotations].sort((a, b) => a.start - b.start);
+            
+            if (sorted.length === 0) {
+                return { start: 0, end: Math.min(30, this.maxFrame) };
+            }
+            
+            // Find first gap after specified frame
+            let searchStart = afterFrame || 0;
+            
+            for (let i = 0; i < sorted.length - 1; i++) {
+                const gap_start = sorted[i].end;
+                const gap_end = sorted[i + 1].start;
+                
+                if (gap_start >= searchStart && gap_end - gap_start >= 3) {
+                    return { start: gap_start, end: gap_end };
+                }
+            }
+            
+            // Check after last annotation
+            const lastEnd = sorted[sorted.length - 1].end;
+            if (lastEnd < this.maxFrame - 3) {
+                return { start: lastEnd, end: Math.min(lastEnd + 30, this.maxFrame) };
+            }
+            
+            return null;
+        }
+        
+        findGaps(minDuration = 3) {
+            const sorted = [...this.annotations].sort((a, b) => a.start - b.start);
+            const gaps = [];
+            
+            // Check start
+            if (sorted.length === 0 || sorted[0].start > minDuration) {
+                gaps.push({
+                    start: 0,
+                    end: sorted.length > 0 ? sorted[0].start : this.maxFrame
+                });
+            }
+            
+            // Check between annotations
+            for (let i = 0; i < sorted.length - 1; i++) {
+                const gapStart = sorted[i].end;
+                const gapEnd = sorted[i + 1].start;
+                
+                if (gapEnd - gapStart >= minDuration) {
+                    gaps.push({ start: gapStart, end: gapEnd });
+                }
+            }
+            
+            // Check end
+            if (sorted.length > 0) {
+                const lastEnd = sorted[sorted.length - 1].end;
+                
+                if (this.maxFrame - lastEnd >= minDuration) {
+                    gaps.push({ start: lastEnd, end: this.maxFrame });
+                }
+            }
+            
+            return gaps;
+        }
+    }
+    
+    // Create validator instance
+    let validator = new AnnotationValidator(annotations, fps);
+    
+    // Function to load frame timestamps
+    async function loadFrameTimestamps() {
+        try {
+            const response = await fetch(`/api/frame_timestamps/${videoId}/${variant}`);
+            const data = await response.json();
+            
+            if (data.success && data.has_timestamps) {
+                frameTimestamps = data.frame_timestamps;
+                console.log('Loaded frame timestamps:', Object.keys(frameTimestamps).length, 'frames');
+                return true;
+            } else {
+                console.log('No frame timestamps available, using calculated timestamps');
+                return false;
+            }
+        } catch (error) {
+            console.error('Error loading frame timestamps:', error);
+            return false;
+        }
+    }
+    
+    // Function to get precise timestamp for a frame
+    function getFrameTimestamp(frameIndex) {
+        const frameFilename = `frame_${frameIndex.toString().padStart(4, '0')}.jpg`;
+        
+        if (frameTimestamps[frameFilename]) {
+            return frameTimestamps[frameFilename].timestamp;
+        }
+        
+        // Fallback to calculated timestamp
+        return frameIndex / fps;
+    }
+
+    // Large Frame Scroller Functions
+    function updateLargeFrameScroller(frameIndex) {
+        currentLargeFrameIndex = frameIndex;
+        
+        // Get frame paths
+        const basePath = `/static/videos/${videoId}/frames/${variant}/large_thumbnails/`;
+        const fallbackPath = `/static/videos/${videoId}/frames/${variant}/`;
+        
+        // Update previous frame
+        const prevIndex = Math.max(0, frameIndex - 1);
+        const prevFrameFile = `frame_${prevIndex.toString().padStart(4, '0')}.jpg`;
+        prevFrameImg.src = basePath + prevFrameFile;
+        prevFrameImg.onerror = () => { prevFrameImg.src = fallbackPath + prevFrameFile; };
+        prevFrameImg.dataset.frame = prevIndex;
+        
+        // Update current frame
+        const currentFrameFile = `frame_${frameIndex.toString().padStart(4, '0')}.jpg`;
+        currentFrameImg.src = basePath + currentFrameFile;
+        currentFrameImg.onerror = () => { currentFrameImg.src = fallbackPath + currentFrameFile; };
+        currentFrameImg.dataset.frame = frameIndex;
+        
+        // Update next frame
+        const nextIndex = Math.min(totalFrames - 1, frameIndex + 1);
+        const nextFrameFile = `frame_${nextIndex.toString().padStart(4, '0')}.jpg`;
+        nextFrameImg.src = basePath + nextFrameFile;
+        nextFrameImg.onerror = () => { nextFrameImg.src = fallbackPath + nextFrameFile; };
+        nextFrameImg.dataset.frame = nextIndex;
+        
+        // Update frame info
+        const timestamp = getFrameTimestamp(frameIndex);
+        currentFrameInfo.textContent = `Frame: ${frameIndex} | Time: ${timestamp.toFixed(3)}s`;
+        
+        // Update navigation button states
+        prevFrameBtn.disabled = frameIndex <= 0;
+        nextFrameBtn.disabled = frameIndex >= totalFrames - 1;
+        
+        // Update selection states
+        updateLargeFrameSelectionStates();
+    }
+
+    function updateLargeFrameSelectionStates() {
+        // Clear all selection states
+        document.getElementById('prevFrame').className = 'large-frame-item';
+        document.getElementById('currentFrame').className = 'large-frame-item current';
+        document.getElementById('nextFrame').className = 'large-frame-item';
+        
+        // Apply selection states based on current selections
+        const prevIndex = Math.max(0, currentLargeFrameIndex - 1);
+        const nextIndex = Math.min(totalFrames - 1, currentLargeFrameIndex + 1);
+        
+        if (selectedStartFrame === prevIndex) {
+            document.getElementById('prevFrame').classList.add('selected-start');
+        }
+        if (selectedEndFrame === prevIndex) {
+            document.getElementById('prevFrame').classList.add('selected-end');
+        }
+        
+        if (selectedStartFrame === currentLargeFrameIndex) {
+            document.getElementById('currentFrame').classList.add('selected-start');
+        }
+        if (selectedEndFrame === currentLargeFrameIndex) {
+            document.getElementById('currentFrame').classList.add('selected-end');
+        }
+        
+        if (selectedStartFrame === nextIndex) {
+            document.getElementById('nextFrame').classList.add('selected-start');
+        }
+        if (selectedEndFrame === nextIndex) {
+            document.getElementById('nextFrame').classList.add('selected-end');
+        }
+    }
+
+    function navigateToFrame(frameIndex) {
+        if (frameIndex < 0 || frameIndex >= totalFrames) return;
+        
+        // Update large frame scroller
+        updateLargeFrameScroller(frameIndex);
+        
+        // Seek video to frame
+        const timestamp = getFrameTimestamp(frameIndex);
+        videoPlayer.pause();
+        videoPlayer.currentTime = timestamp;
+        
+        // Update small frame strip highlighting
+        highlightCurrentFrame(timestamp);
+        
+        console.log(`Navigated to frame ${frameIndex} at timestamp ${timestamp.toFixed(6)}s`);
+    }
+    
+    // Keyboard Shortcuts Class
+    class KeyboardShortcuts {
+        constructor(videoPlayer, annotationControls) {
+            this.video = videoPlayer;
+            this.controls = annotationControls;
+            this.enabled = true;
+            this.init();
+        }
+        
+        init() {
+            document.addEventListener('keydown', (e) => {
+                if (!this.enabled || e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+                    return;
+                }
+                
+                switch(e.key) {
+                    case ' ':  // Spacebar
+                        e.preventDefault();
+                        this.video.paused ? this.video.play() : this.video.pause();
+                        break;
+                        
+                    case 'i':  // Set in point
+                        e.preventDefault();
+                        setStartBtn.click();
+                        break;
+                        
+                    case 'o':  // Set out point
+                        e.preventDefault();
+                        setEndBtn.click();
+                        break;
+                        
+                    case 'Enter':  // Add annotation
+                        if (e.ctrlKey || e.metaKey) {
+                            e.preventDefault();
+                            addAnnotationBtn.click();
+                        }
+                        break;
+                        
+                    case 'ArrowLeft':  // Frame back
+                        e.preventDefault();
+                        if (e.shiftKey) {
+                            this.video.currentTime = Math.max(0, this.video.currentTime - 10);
+                        } else {
+                            this.video.currentTime = Math.max(0, this.video.currentTime - 1/fps);
+                        }
+                        break;
+                        
+                    case 'ArrowRight':  // Frame forward
+                        e.preventDefault();
+                        if (e.shiftKey) {
+                            this.video.currentTime = Math.min(this.video.duration, this.video.currentTime + 10);
+                        } else {
+                            this.video.currentTime = Math.min(this.video.duration, this.video.currentTime + 1/fps);
+                        }
+                        break;
+                        
+                    case 'g':  // Go to gap
+                        if (e.shiftKey) {
+                            e.preventDefault();
+                            this.navigateToNextGap();
+                        }
+                        break;
+                        
+                    case 'Escape':  // Cancel edit mode
+                        e.preventDefault();
+                        if (currentEditingAnnotation) {
+                            exitEditMode();
+                        }
+                        break;
+                }
+            });
+        }
+        
+        navigateToNextGap() {
+            const gaps = validator.findGaps();
+            if (gaps.length === 0) {
+                showStatus('No gaps found');
+                return;
+            }
+            
+            const currentFrame = Math.round(this.video.currentTime * fps);
+            const currentCanonicalFrame = mapVariantToCanonical(currentFrame);
+            
+            // Find next gap after current position
+            let targetGap = gaps.find(g => g.start > currentCanonicalFrame);
+            
+            // If no gap found after current position, go to first gap
+            if (!targetGap) {
+                targetGap = gaps[0];
+            }
+            
+            if (targetGap) {
+                const targetVariantFrame = mapCanonicalToVariant(targetGap.start);
+                this.video.currentTime = targetVariantFrame / fps;
+                showStatus(`Navigated to gap: ${targetGap.start}-${targetGap.end} frames`);
+            }
+        }
+        
+        enable() {
+            this.enabled = true;
+        }
+        
+        disable() {
+            this.enabled = false;
+        }
+    }
+    
+    // Create keyboard shortcuts instance
+    const keyboardShortcuts = new KeyboardShortcuts(videoPlayer, {
+        fps: fps,
+        navigateToNextGap: function() {
+            // This will be implemented in the KeyboardShortcuts class
+        }
+    });
     
     // Display the detected FPS
     console.log(`Using video FPS: ${fps}, Canonical FPS: ${canonicalFps}`);
@@ -47,7 +424,46 @@ document.addEventListener('DOMContentLoaded', function() {
         if (document.getElementById('fpsDisplay')) {
             document.getElementById('fpsDisplay').textContent = fps;
         }
+        
+        // Initialize with any existing annotations after metadata is loaded
+        if (!annotationsLoaded) {
+            loadInitialAnnotations();
+            annotationsLoaded = true;
+        }
+        
+        // Load frame timestamps for precise seeking
+        loadFrameTimestamps();
     });
+    
+    // Function to load initial annotations
+    function loadInitialAnnotations() {
+        if (typeof initialAnnotations !== 'undefined' && initialAnnotations.length > 0) {
+            annotations = initialAnnotations;
+            
+            // Sort annotations before adding to the table
+            sortAnnotations();
+            
+            // Add existing annotations to the table
+            annotations.forEach(annotation => {
+                addAnnotationToTable(annotation);
+            });
+            
+            showStatus(`Loaded ${annotations.length} annotations`);
+        }
+    }
+    
+    // Fallback: Load annotations after a short delay if video metadata doesn't load
+    let annotationsLoaded = false;
+    setTimeout(() => {
+        if (!annotationsLoaded) {
+            console.log('Loading annotations via fallback timeout');
+            loadInitialAnnotations();
+            annotationsLoaded = true;
+        }
+        
+        // Also load frame timestamps as fallback
+        loadFrameTimestamps();
+    }, 1000);
     
     // Add event listener for timeupdate to highlight current frame
     videoPlayer.addEventListener('timeupdate', function() {
@@ -66,14 +482,16 @@ document.addEventListener('DOMContentLoaded', function() {
         const frames = frameStrip.querySelectorAll('img');
         let closestFrame = null;
         let closestDiff = Infinity;
+        let closestFrameIndex = 0;
         
-        frames.forEach(img => {
+        frames.forEach((img, index) => {
             const time = parseFloat(img.dataset.time);
             const diff = Math.abs(time - currentTime);
             
             if (diff < closestDiff) {
                 closestDiff = diff;
                 closestFrame = img;
+                closestFrameIndex = index;
             }
         });
         
@@ -81,6 +499,9 @@ document.addEventListener('DOMContentLoaded', function() {
         if (closestFrame) {
             closestFrame.classList.add('current-frame');
             currentFrameElement = closestFrame;
+            
+            // Update large frame scroller to match current frame
+            updateLargeFrameScroller(closestFrameIndex);
             
             // Check if the frame is near the edge of the visible area
             const frameRect = closestFrame.getBoundingClientRect();
@@ -115,37 +536,43 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
-    // Initialize with any existing annotations
-    if (typeof initialAnnotations !== 'undefined' && initialAnnotations.length > 0) {
-        annotations = initialAnnotations;
-        
-        // Sort annotations before adding to the table
-        sortAnnotations();
-        
-        // Add existing annotations to the table
-        annotations.forEach(annotation => {
-            addAnnotationToTable(annotation);
-        });
-        
-        showStatus(`Loaded ${annotations.length} annotations`);
-    }
-    
     // Event handling for frame thumbnails
     frameStrip.querySelectorAll('img').forEach(img => {
         img.addEventListener('click', function() {
-            const time = parseFloat(this.dataset.time);
+            const frameIndex = parseInt(this.dataset.frame);
+            
+            // Get precise timestamp for this frame
+            const time = getFrameTimestamp(frameIndex);
+            
             // Ensure the time is valid and set it
             if (!isNaN(time) && time >= 0) {
                 // Force the video to seek to the exact time
                 videoPlayer.pause();
                 videoPlayer.currentTime = time;
-                // Optional: Play the video after a small delay to ensure the seek completes
-                // setTimeout(() => {
-                //     videoPlayer.play().catch(e => {
-                //         // Handle any autoplay restrictions
-                //         console.log("Could not automatically play after seeking:", e);
-                //     });
-                // }, 50);
+                
+                // Update large frame scroller
+                updateLargeFrameScroller(frameIndex);
+                
+                console.log(`Seeking to frame ${frameIndex} at precise timestamp ${time.toFixed(6)}s`);
+            }
+        });
+    });
+
+    // Event handling for large frame scroller navigation
+    prevFrameBtn.addEventListener('click', function() {
+        navigateToFrame(currentLargeFrameIndex - 1);
+    });
+
+    nextFrameBtn.addEventListener('click', function() {
+        navigateToFrame(currentLargeFrameIndex + 1);
+    });
+
+    // Event handling for large frame clicks
+    [prevFrameImg, currentFrameImg, nextFrameImg].forEach(img => {
+        img.addEventListener('click', function() {
+            const frameIndex = parseInt(this.dataset.frame);
+            if (!isNaN(frameIndex)) {
+                navigateToFrame(frameIndex);
             }
         });
     });
@@ -171,6 +598,9 @@ document.addEventListener('DOMContentLoaded', function() {
         // Update state
         selectedStartFrame = frameNumber;
         startFrameDisplay.textContent = frameNumber;
+        
+        // Update large frame scroller selection states
+        updateLargeFrameSelectionStates();
         
         // Check if we can enable the Add button
         checkEnableAddButton();
@@ -198,6 +628,9 @@ document.addEventListener('DOMContentLoaded', function() {
         selectedEndFrame = frameNumber;
         endFrameDisplay.textContent = frameNumber;
         
+        // Update large frame scroller selection states
+        updateLargeFrameSelectionStates();
+        
         // Check if we can enable the Add button
         checkEnableAddButton();
     });
@@ -214,12 +647,28 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
         
+        // Convert to canonical frames for validation
+        const canonicalStart = mapVariantToCanonical(selectedStartFrame);
+        const canonicalEnd = mapVariantToCanonical(selectedEndFrame);
+        
+        // Validate annotation
+        const excludeId = currentEditingAnnotation ? currentEditingAnnotation.id : null;
+        const validation = validator.validateAnnotation(canonicalStart, canonicalEnd, excludeId);
+        
+        if (!validation.valid) {
+            showValidationErrors(validation.errors);
+            return;
+        }
+        
         if (currentEditingAnnotation) {
             // We're editing an existing annotation
-            currentEditingAnnotation.start = mapVariantToCanonical(selectedStartFrame);
-            currentEditingAnnotation.end = mapVariantToCanonical(selectedEndFrame);
+            currentEditingAnnotation.start = canonicalStart;
+            currentEditingAnnotation.end = canonicalEnd;
             currentEditingAnnotation.type = eventTypeInput.value.trim();
             currentEditingAnnotation.notes = notesInput.value.trim();
+            
+            // Update validator with new annotations
+            validator = new AnnotationValidator(annotations, fps);
             
             // Clear UI components
             clearAnnotationForm();
@@ -238,14 +687,17 @@ document.addEventListener('DOMContentLoaded', function() {
             // We're adding a new annotation
             const newAnnotation = {
                 id: Date.now().toString(),  // Simple unique ID
-                start: mapVariantToCanonical(selectedStartFrame),
-                end: mapVariantToCanonical(selectedEndFrame),
+                start: canonicalStart,
+                end: canonicalEnd,
                 type: eventTypeInput.value.trim(),
                 notes: notesInput.value.trim()
             };
             
             // Add to our annotations array
             annotations.push(newAnnotation);
+            
+            // Update validator with new annotations
+            validator = new AnnotationValidator(annotations, fps);
             
             // Add to the table
             addAnnotationToTable(newAnnotation);
@@ -604,6 +1056,17 @@ document.addEventListener('DOMContentLoaded', function() {
         const variantStartFrame = mapCanonicalToVariant(parseInt(annotation.start));
         const variantEndFrame = mapCanonicalToVariant(parseInt(annotation.end));
         
+        // Debug logging for frame mapping
+        console.log('Adding annotation to table:', {
+            originalStart: annotation.start,
+            originalEnd: annotation.end,
+            variantStartFrame,
+            variantEndFrame,
+            fps,
+            canonicalFps,
+            clipStartFrameOffset
+        });
+        
         // Create cells for the row with the mapped frame values
         const startFrameCell = document.createElement('td');
         startFrameCell.textContent = variantStartFrame;
@@ -697,16 +1160,46 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Function to map canonical frame to variant frame
     function mapCanonicalToVariant(canonicalFrame) {
-        // Using the formula from the PRD:
-        // variant_frame = round(((canon - clipStartCanon) / C_FPS) * V_FPS)
-        return Math.round(((canonicalFrame - clipStartFrame) / canonicalFps) * fps);
+        // Ensure we have valid values for FPS variables
+        if (!fps || !canonicalFps) {
+            console.warn('FPS variables not properly initialized:', { fps, canonicalFps });
+            return 0;
+        }
+        
+        // Add bounds checking - use a reasonable maximum if video duration is not available
+        const videoDuration = videoPlayer.duration || 3600; // Default to 1 hour if duration unknown
+        const maxCanonicalFrame = Math.floor(videoDuration * canonicalFps);
+        canonicalFrame = Math.max(0, Math.min(canonicalFrame, maxCanonicalFrame));
+        
+        // Handle floating point precision
+        const calculation = ((canonicalFrame - clipStartFrameOffset) / canonicalFps) * fps;
+        const result = Math.round(calculation);
+        
+        // Debug logging for troubleshooting
+        if (result === 0 && canonicalFrame > 0) {
+            console.log('Frame mapping issue:', {
+                canonicalFrame,
+                clipStartFrameOffset,
+                canonicalFps,
+                fps,
+                calculation,
+                result,
+                videoDuration: videoPlayer.duration
+            });
+        }
+        
+        return Math.max(0, result);
     }
     
     // Function to map variant frame to canonical frame
     function mapVariantToCanonical(variantFrame) {
-        // Using the formula from the PRD:
-        // canon = round((variant_frame / V_FPS) * C_FPS) + clipStartCanon
-        return Math.round((variantFrame / fps) * canonicalFps) + clipStartFrame;
+        // Add bounds checking
+        const maxVariantFrame = Math.floor((videoPlayer.duration || 0) * fps);
+        variantFrame = Math.max(0, Math.min(variantFrame, maxVariantFrame));
+        
+        // Handle floating point precision
+        const result = Math.round((variantFrame / fps) * canonicalFps) + clipStartFrameOffset;
+        return Math.max(0, result);
     }
     
     // Show status message
@@ -727,4 +1220,118 @@ document.addEventListener('DOMContentLoaded', function() {
             statusMessage.style.display = 'none';
         }, 3000);
     }
+    
+    // Function to show validation errors
+    function showValidationErrors(errors) {
+        const errorContainer = document.getElementById('validationErrors') || createValidationErrorContainer();
+        errorContainer.innerHTML = '';
+        
+        errors.forEach(error => {
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'validation-error-item';
+            errorDiv.textContent = error;
+            errorContainer.appendChild(errorDiv);
+        });
+        
+        errorContainer.style.display = 'block';
+        
+        // Hide after 5 seconds
+        setTimeout(() => {
+            errorContainer.style.display = 'none';
+        }, 5000);
+    }
+    
+    // Function to create validation error container
+    function createValidationErrorContainer() {
+        const container = document.createElement('div');
+        container.id = 'validationErrors';
+        container.className = 'validation-error';
+        
+        // Insert after the annotation form
+        const annotationForm = document.querySelector('.annotation-form') || document.querySelector('#annotation-panel');
+        if (annotationForm) {
+            annotationForm.insertAdjacentElement('afterend', container);
+        } else {
+            // Fallback: insert before the annotations table
+            const table = document.querySelector('#annotationsTable');
+            if (table) {
+                table.insertAdjacentElement('beforebegin', container);
+            }
+        }
+        
+        return container;
+    }
+    
+    // Initialize the application
+    // Initialize total frames count
+    totalFrames = frameStrip.querySelectorAll('img').length;
+    
+    // Initialize large frame scroller
+    if (totalFrames > 0) {
+        updateLargeFrameScroller(0);
+    }
+    
+    // Toggle Section Functionality
+    function toggleSection(sectionKey, content, toggleBtn) {
+        const isVisible = sectionVisibility[sectionKey];
+        
+        if (isVisible) {
+            // Hide section
+            content.style.display = 'none';
+            toggleBtn.classList.add('minimized');
+            sectionVisibility[sectionKey] = false;
+        } else {
+            // Show section
+            content.style.display = 'block';
+            toggleBtn.classList.remove('minimized');
+            sectionVisibility[sectionKey] = true;
+        }
+    }
+    
+    function updatePlayPauseButton() {
+        if (videoPlayer.paused) {
+            playPauseBtn.textContent = '▶';
+            playPauseBtn.classList.remove('playing');
+            playPauseBtn.title = 'Play';
+        } else {
+            playPauseBtn.textContent = '⏸';
+            playPauseBtn.classList.add('playing');
+            playPauseBtn.title = 'Pause';
+        }
+    }
+    
+    // Event listeners for feature toggle buttons
+    if (videoToggleBtn) {
+        videoToggleBtn.addEventListener('click', function() {
+            toggleSection('video', videoContent, videoToggleBtn);
+        });
+    }
+    
+    if (frameStripToggleBtn) {
+        frameStripToggleBtn.addEventListener('click', function() {
+            toggleSection('frameStrip', frameStripContent, frameStripToggleBtn);
+        });
+    }
+    
+    if (largeFrameStripToggleBtn) {
+        largeFrameStripToggleBtn.addEventListener('click', function() {
+            toggleSection('largeFrameStrip', largeFrameStripContent, largeFrameStripToggleBtn);
+        });
+    }
+    
+    // Play/Pause button functionality
+    if (playPauseBtn) {
+        playPauseBtn.addEventListener('click', function() {
+            if (videoPlayer.paused) {
+                videoPlayer.play();
+            } else {
+                videoPlayer.pause();
+            }
+        });
+    }
+    
+    // Update play/pause button when video state changes
+    videoPlayer.addEventListener('play', updatePlayPauseButton);
+    videoPlayer.addEventListener('pause', updatePlayPauseButton);
+    videoPlayer.addEventListener('loadedmetadata', updatePlayPauseButton);
 }); 
